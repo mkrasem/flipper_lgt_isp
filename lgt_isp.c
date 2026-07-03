@@ -15,6 +15,7 @@
 #include <gui/view.h>
 #include <gui/modules/submenu.h>
 #include <gui/modules/widget.h>
+#include <gui/elements.h>
 #include <dialogs/dialogs.h>
 #include <storage/storage.h>
 #include <notification/notification.h>
@@ -24,7 +25,7 @@
 #include "ihex.h"
 #include "usb_isp.h"
 
-#define LGT_ISP_VERSION "0.2.4"
+#define LGT_ISP_VERSION "0.3.1"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
@@ -76,22 +77,37 @@ typedef struct {
     bool finished;
 } WorkModel;
 
+/* niedlicher Chip-Mascot (Canvas-Primitive, kein PNG noetig) */
+static void draw_chip(Canvas* c, int x, int y) {
+    canvas_draw_rframe(c, x, y, 28, 24, 3);            /* IC-Koerper */
+    for(int i = 0; i < 4; i++) {                       /* Beinchen */
+        canvas_draw_line(c, x - 3, y + 4 + i * 5, x - 1, y + 4 + i * 5);
+        canvas_draw_line(c, x + 28, y + 4 + i * 5, x + 30, y + 4 + i * 5);
+    }
+    canvas_draw_line(c, x + 11, y + 1, x + 17, y + 1); /* Kerbe */
+    canvas_draw_disc(c, x + 9, y + 10, 2);             /* Augen */
+    canvas_draw_disc(c, x + 19, y + 10, 2);
+    canvas_draw_line(c, x + 10, y + 17, x + 18, y + 17); /* Laecheln */
+    canvas_draw_dot(c, x + 9, y + 16);
+    canvas_draw_dot(c, x + 19, y + 16);
+}
+
 static void work_draw(Canvas* canvas, void* model) {
     WorkModel* m = model;
     canvas_clear(canvas);
+    draw_chip(canvas, 6, 30);
     canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 12, "LGT ISP");
+    canvas_draw_str(canvas, 44, 12, "LGT ISP");
     canvas_set_font(canvas, FontSecondary);
     if(!m->finished) {
-        char buf[40];
+        char buf[16];
         int pct = m->total ? (int)((uint64_t)m->done * 100u / m->total) : 0;
-        snprintf(buf, sizeof(buf), "%s ... %d%%", m->phase, pct);
-        canvas_draw_str(canvas, 2, 30, buf);
-        canvas_draw_frame(canvas, 2, 40, 124, 10);
-        canvas_draw_box(canvas, 3, 41, (122 * pct) / 100, 8);
+        canvas_draw_str(canvas, 44, 26, m->phase);
+        snprintf(buf, sizeof(buf), "%d%%", pct);
+        elements_progress_bar_with_text(canvas, 44, 32, 82, (float)pct / 100.0f, buf);
     } else {
-        canvas_draw_str(canvas, 2, 34, m->result);
-        canvas_draw_str(canvas, 2, 62, "Zurueck = Menue");
+        elements_multiline_text_aligned(canvas, 44, 24, AlignLeft, AlignTop, m->result);
+        canvas_draw_str(canvas, 44, 62, "Zurueck = Menue");
     }
 }
 
@@ -115,12 +131,13 @@ static void usb_draw(Canvas* canvas, void* model) {
     UNUSED(model);
     canvas_clear(canvas);
     canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 12, "USB aktiv (avrdude)");
+    canvas_draw_str(canvas, 2, 12, "USB aktiv");
+    draw_chip(canvas, 8, 30);
     canvas_set_font(canvas, FontSecondary);
-    canvas_draw_str(canvas, 2, 26, "2. COM-Port nehmen!");
-    canvas_draw_str(canvas, 2, 38, "-c stk500v1 -p m328p");
-    canvas_draw_str(canvas, 2, 50, "meldet sich als 328P");
-    canvas_draw_str(canvas, 2, 62, "Zurueck = beenden");
+    canvas_draw_str(canvas, 48, 28, "avrdude:");
+    canvas_draw_str(canvas, 48, 39, "stk500v1 / 328P");
+    canvas_draw_str(canvas, 48, 50, "2. COM-Port!");
+    canvas_draw_str(canvas, 2, 63, "Zurueck = beenden");
 }
 static void usb_enter(void* ctx) {
     App* app = ctx;
@@ -158,7 +175,6 @@ static bool load_hex_file(App* app, const char* path) {
     return ok;
 }
 
-/* ---------- Worker ---------- */
 static void progress_cb(void* ctx, uint32_t done, uint32_t total, const char* phase) {
     App* app = ctx;
     furi_mutex_acquire(app->mtx, FuriWaitForever);

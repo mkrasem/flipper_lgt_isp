@@ -4,7 +4,10 @@ Flasht einen **LGT8F328P** über dessen proprietäres SWD-Protokoll (GPIO-Bitban
 direkt vom Flipper Zero — standalone von SD **oder** per **USB mit avrdude** vom
 PC. Handling im Stil der offiziellen AVR-ISP-Programmer-App.
 
-**Version 0.2.4** · Kategorie: GPIO
+**Version 0.3.1** · Kategorie: GPIO
+
+Fortschrittsbalken (`elements_progress_bar_with_text`) und ein gezeichneter
+Chip-Mascot fuer etwas Flipper-Niedlichkeit auf den Arbeits-/USB-Screens.
 
 ## Status — ehrlich
 - Der **SWD-Kern** (`lgt_swd.c`) ist ein *faithful port* aus dem hardware-
@@ -53,6 +56,15 @@ Menü:
 - **USB (avrdude)** — Flipper wird virtueller COM-Port (siehe unten).
 - **Verdrahtung / About** — Pinout bzw. Version.
 
+### Kein Dump/Auslesen (LGT-Grenze)
+Anders als bei AVR-ISP laesst sich bestehende Firmware vom LGT8F328P **nicht
+auslesen**. Die Lese-Engine (EEE) wird erst durch die volle Unlock-Sequenz
+freigeschaltet, und die **loescht den Chip** — die EEE-Freischaltung steht im
+Protokoll hinter dem ChipErase. Lesen funktioniert daher nur zum *Verifizieren*
+dessen, was man gerade in derselben Session geschrieben hat (das nutzt avrdude
+beim USB-Flashen). Ein Dump wurde getestet und liefert konsequent `FF` -> das
+Feature ist bewusst nicht enthalten. (Faktisch ein Kopierschutz des LGT.)
+
 ### USB-Modus (wie bei der AVR-ISP-App)
 Menüpunkt **USB (avrdude)** wählen → der Flipper meldet sich als serielles Gerät.
 Am PC dann mit **avrdude** flashen (der Flipper meldet sich als 328P, weil der
@@ -85,6 +97,11 @@ gibt es bewusst keinen Dump-Modus.
 | `lgt_isp_10px.png` | App-Icon (10×10, 1-bit) |
 
 ## Changelog
+- **0.3.1** — Dump wieder entfernt: auf dem LGT technisch nicht moeglich (Lese-
+  Engine kommt nur nach dem loeschenden Unlock hoch; ein Testdump lieferte nur
+  FF). Die Grafik aus 0.3.0 bleibt.
+- **0.3.0** — (zurueckgezogen) Dump-Versuch; Grafik aufgehuebscht: eingebauter
+  Progress-Balken + gezeichneter Chip-Mascot auf Work-/USB-Screen.
 - **0.2.4** — Fix: Haenger beim VERLASSEN des USB-Modus. USB-Start/Stop laufen
   jetzt in den view-enter/exit-Callbacks (wie die offizielle App), nicht mehr
   synchron im Back-/Navigations-Callback. USB-Auf/Zu selbst war schon korrekt.

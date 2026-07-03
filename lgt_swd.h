@@ -25,7 +25,6 @@ void lgt_gpio_deinit(void);
  * Rueckgabe: >=0 = Zahl abweichender Bytes (0 = ok), -1 = kein LGT erkannt. */
 int  lgt_flash(const uint8_t* img, uint32_t img_len, bool verify, LgtProgressCb cb, void* ctx);
 int  lgt_verify(const uint8_t* img, uint32_t img_len, LgtProgressCb cb, void* ctx);
-int  lgt_dump(uint8_t* out /* >= LGT_FLASH_BYTES */, LgtProgressCb cb, void* ctx);
 
 /* Nur die Chip-ID lesen (kein Erase). true = LGT erkannt, id[0]=0x3E/0x3F. */
 bool lgt_read_id(uint8_t id[4]);

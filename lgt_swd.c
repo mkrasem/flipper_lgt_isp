@@ -279,19 +279,6 @@ int lgt_verify(const uint8_t* img, uint32_t img_len, LgtProgressCb cb, void* ctx
     return bad;
 }
 
-int lgt_dump(uint8_t* out, LgtProgressCb cb, void* ctx) {
-    uint32_t a;
-    lgt_gpio_init();
-    if(!start_pmode(1)) { end_pmode(); lgt_gpio_deinit(); return -1; }  /* Achtung: Unlock loescht den Chip! */
-    for(a = 0; a < LGT_FLASH_BYTES; a += LGT_PAGE_BYTES) {
-        lgt_read_page(a, &out[a], LGT_PAGE_BYTES);
-        if(cb) cb(ctx, a, LGT_FLASH_BYTES, "Lesen");
-    }
-    end_pmode();
-    lgt_gpio_deinit();
-    return 0;
-}
-
 /* --- persistente pmode-Session fuer STK500/USB --- */
 bool lgt_pmode_enter(void) {
     lgt_gpio_init();
