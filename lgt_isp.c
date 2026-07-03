@@ -24,7 +24,7 @@
 #include "ihex.h"
 #include "usb_isp.h"
 
-#define LGT_ISP_VERSION "0.2.0"
+#define LGT_ISP_VERSION "0.2.1"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
@@ -343,7 +343,6 @@ static App* app_alloc(void) {
     app->notif = furi_record_open(RECORD_NOTIFICATION);
 
     app->vd = view_dispatcher_alloc();
-    view_dispatcher_enable_queue(app->vd);
     view_dispatcher_set_event_callback_context(app->vd, app);
     view_dispatcher_set_custom_event_callback(app->vd, custom_cb);
     view_dispatcher_set_navigation_event_callback(app->vd, nav_exit);

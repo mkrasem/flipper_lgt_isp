@@ -1,14 +1,11 @@
 /* ============================================================
  * usb_isp.c  —  USB-CDC (virtuelles COM) + STK500-Worker fuer den Flipper.
  *
- * ACHTUNG (nicht hier testbar): die USB-CDC-Namen koennen je nach Firmware
- * leicht abweichen. Gepruefte Kandidaten:
- *   - Interface-Record:  usb_cdc_single        (furi_hal_usb_cdc.h)
+ * CDC-API steckt in <furi_hal_usb_cdc.h>:
+ *   - Interface-Record:  usb_cdc_single
  *   - Callbacks setzen:  furi_hal_cdc_set_callbacks(if, CdcCallbacks*, ctx)
- *   - Empfangen:         furi_hal_cdc_receive(if, buf, max) -> size_t
- *   - Senden:            furi_hal_cdc_send(if, buf, len)
- * Falls dein Firmware-Zweig andere Signaturen hat: hier ist die einzige Stelle,
- * die angepasst werden muss. Der STK500-/LGT-Teil bleibt unveraendert.
+ *   - Empfangen:         furi_hal_cdc_receive(if, buf, max) -> int32_t
+ *   - Senden:            furi_hal_cdc_send(if, buf, len)  (len = uint16_t)
  * ============================================================ */
 #include "usb_isp.h"
 #include "stk500.h"
@@ -17,7 +14,6 @@
 #include <furi_hal.h>
 #include <furi_hal_usb.h>
 #include <furi_hal_usb_cdc.h>
-#include <furi_hal_cdc.h>
 
 #define CDC_IF 0
 
@@ -33,8 +29,8 @@ struct UsbIsp {
 static void cdc_rx(void* ctx) {
     UsbIsp* u = ctx;
     uint8_t tmp[64];
-    size_t n = furi_hal_cdc_receive(CDC_IF, tmp, sizeof(tmp));
-    if(n) furi_stream_buffer_send(u->rx, tmp, n, 0);
+    int32_t n = furi_hal_cdc_receive(CDC_IF, tmp, sizeof(tmp));
+    if(n > 0) furi_stream_buffer_send(u->rx, tmp, (size_t)n, 0);
 }
 static CdcCallbacks cdc_cb = {
     .tx_ep_callback = NULL,
@@ -54,7 +50,7 @@ static void io_send(void* ctx, const uint8_t* buf, size_t n) {
     size_t off = 0;
     while(n) {
         size_t chunk = n > 64 ? 64 : n;            /* CDC-Bulk in 64-B-Haeppchen */
-        furi_hal_cdc_send(CDC_IF, (uint8_t*)buf + off, chunk);
+        furi_hal_cdc_send(CDC_IF, (uint8_t*)buf + off, (uint16_t)chunk);
         off += chunk;
         n -= chunk;
     }

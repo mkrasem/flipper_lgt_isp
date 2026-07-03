@@ -4,7 +4,7 @@ Flasht einen **LGT8F328P** über dessen proprietäres SWD-Protokoll (GPIO-Bitban
 direkt vom Flipper Zero — standalone von SD **oder** per **USB mit avrdude** vom
 PC. Handling im Stil der offiziellen AVR-ISP-Programmer-App.
 
-**Version 0.2.0** · Kategorie: GPIO
+**Version 0.2.1** · Kategorie: GPIO
 
 ## Status — ehrlich
 - Der **SWD-Kern** (`lgt_swd.c`) ist ein *faithful port* aus dem hardware-
@@ -80,6 +80,9 @@ gibt es bewusst keinen Dump-Modus.
 | `lgt_isp_10px.png` | App-Icon (10×10, 1-bit) |
 
 ## Changelog
+- **0.2.1** — Build-Fix: korrektes CDC-Header (`furi_hal_usb_cdc.h`, kein
+  `furi_hal_cdc.h`), `furi_hal_cdc_receive` als int32_t; deprecated
+  `view_dispatcher_enable_queue` entfernt.
 - **0.2.0** — USB-Modus: STK500v1-Slave über USB-CDC, avrdude-flashbar
   (`-c stk500v1 -p m328p`); übersetzt auf LGT-SWD, meldet 328P-Signatur.
 - **0.1.0** — Erstwurf: SD-Flash/Verify + Chip-ID, LGT-SWD-Kern portiert.
