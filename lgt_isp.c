@@ -24,7 +24,7 @@
 #include "ihex.h"
 #include "usb_isp.h"
 
-#define LGT_ISP_VERSION "0.2.3"
+#define LGT_ISP_VERSION "0.2.4"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
@@ -48,7 +48,7 @@ typedef struct {
     Submenu* menu;
     View* work;                 /* eigener Live-Progress-/Ergebnis-View */
     Widget* info;               /* scrollbarer Text (Verdrahtung/About) */
-    Widget* usbview;            /* USB-Modus-Screen */
+    View* usb_view;             /* USB-Modus-Screen (eigener enter/exit-Lifecycle) */
     UsbIsp* usb;                /* != NULL wenn USB-Modus aktiv */
     DialogsApp* dialogs;
     Storage* storage;
@@ -107,14 +107,31 @@ static bool nav_exit(void* ctx) {
     return true;
 }
 
-/* Back im USB-View -> USB-Modus beenden, zurueck ins Menue */
-static uint32_t usb_back(void* ctx) {
+/* USB-View mit eigenem Lifecycle — GENAU wie die offizielle AVR-ISP-App:
+ * Start/Stop passieren in den view_dispatcher enter/exit-Callbacks, NICHT im
+ * Navigations-Callback. Das synchrone Stop (join + USB-Config zurueck) im
+ * Back-Handler war die Ursache, warum der Flipper beim Verlassen haengen blieb. */
+static void usb_draw(Canvas* canvas, void* model) {
+    UNUSED(model);
+    canvas_clear(canvas);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 12, "USB aktiv (avrdude)");
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 2, 26, "2. COM-Port nehmen!");
+    canvas_draw_str(canvas, 2, 38, "-c stk500v1 -p m328p");
+    canvas_draw_str(canvas, 2, 50, "meldet sich als 328P");
+    canvas_draw_str(canvas, 2, 62, "Zurueck = beenden");
+}
+static void usb_enter(void* ctx) {
+    App* app = ctx;
+    if(!app->usb) app->usb = usb_isp_start();
+}
+static void usb_exit(void* ctx) {
     App* app = ctx;
     if(app->usb) {
         usb_isp_stop(app->usb);
         app->usb = NULL;
     }
-    return ViewMenu;
 }
 
 /* ---------- HEX von SD laden ---------- */
@@ -262,19 +279,6 @@ static const char* ABOUT_TEXT =
     "Chip immer. Verify nur direkt\n"
     "nach dem Flashen sinnvoll.";
 
-static const char* USB_TEXT =
-    "USB-Modus aktiv\n"
-    "Es erscheint ein ZWEITER\n"
-    "COM-Port (Kanal 1) — den\n"
-    "nehmen, nicht den CLI-Port.\n"
-    "\n"
-    "avrdude -c stk500v1\n"
-    "  -p m328p -P <COM>\n"
-    "  -U flash:w:sketch.hex:i\n"
-    "\n"
-    "Meldet sich als 328P.\n"
-    "Zurueck = USB beenden";
-
 static void show_info(App* app, const char* text) {
     widget_reset(app->info);
     widget_add_text_scroll_element(app->info, 0, 0, 128, 64, text);
@@ -314,10 +318,7 @@ static void menu_cb(void* ctx, uint32_t index) {
         start_work(app);
         break;
     case ItemUsb:
-        app->usb = usb_isp_start();
-        widget_reset(app->usbview);
-        widget_add_text_scroll_element(app->usbview, 0, 0, 128, 64, USB_TEXT);
-        view_dispatcher_switch_to_view(app->vd, ViewUsb);
+        view_dispatcher_switch_to_view(app->vd, ViewUsb);   /* enter-Callback startet USB */
         break;
     case ItemWiring:
         show_info(app, WIRING_TEXT);
@@ -370,11 +371,14 @@ static App* app_alloc(void) {
     view_set_previous_callback(widget_get_view(app->info), nav_to_menu);
     view_dispatcher_add_view(app->vd, ViewInfo, widget_get_view(app->info));
 
-    /* USB-Modus-Widget (eigener Back-Handler beendet USB) */
-    app->usbview = widget_alloc();
-    view_set_context(widget_get_view(app->usbview), app);
-    view_set_previous_callback(widget_get_view(app->usbview), usb_back);
-    view_dispatcher_add_view(app->vd, ViewUsb, widget_get_view(app->usbview));
+    /* USB-Modus-View mit enter/exit-Lifecycle (Start/Stop wie offizielle App) */
+    app->usb_view = view_alloc();
+    view_set_context(app->usb_view, app);
+    view_set_draw_callback(app->usb_view, usb_draw);
+    view_set_enter_callback(app->usb_view, usb_enter);
+    view_set_exit_callback(app->usb_view, usb_exit);
+    view_set_previous_callback(app->usb_view, nav_to_menu);
+    view_dispatcher_add_view(app->vd, ViewUsb, app->usb_view);
 
     /* Worker (einmal allokiert, pro Op gestartet/gejoint) */
     app->worker = furi_thread_alloc();
@@ -399,7 +403,7 @@ static void app_free(App* app) {
     submenu_free(app->menu);
     view_free(app->work);
     widget_free(app->info);
-    widget_free(app->usbview);
+    view_free(app->usb_view);
     view_dispatcher_free(app->vd);
     furi_thread_free(app->worker);
 

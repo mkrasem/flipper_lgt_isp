@@ -4,7 +4,7 @@ Flasht einen **LGT8F328P** über dessen proprietäres SWD-Protokoll (GPIO-Bitban
 direkt vom Flipper Zero — standalone von SD **oder** per **USB mit avrdude** vom
 PC. Handling im Stil der offiziellen AVR-ISP-Programmer-App.
 
-**Version 0.2.3** · Kategorie: GPIO
+**Version 0.2.4** · Kategorie: GPIO
 
 ## Status — ehrlich
 - Der **SWD-Kern** (`lgt_swd.c`) ist ein *faithful port* aus dem hardware-
@@ -18,8 +18,10 @@ PC. Handling im Stil der offiziellen AVR-ISP-Programmer-App.
   disabled/enabled. Genau das ist jetzt in `usb_isp.c`.
 - Dadurch erscheint am PC ein **zweiter COM-Port** — avrdude nutzt DEN (Kanal 1),
   nicht den CLI-Port.
-- Ehrlich: noch nicht von mir hardware-getestet, aber es folgt jetzt 1:1 dem
-  Muster einer erwiesenermassen stabilen App. Der SD-Flash-Modus ist unberuehrt.
+- **Hardware-bestaetigt:** avrdude (`-c stk500v1 -p m328p`) flasht einen LGT8F328P
+  ueber den Flipper per USB, Write UND Verify sauber (8422 B: ~3,3 s Write /
+  ~2,7 s Verify, kein Haenger). avrdude erkennt die gemeldete Signatur 1E 95 0F
+  selbst als u.a. LGT8F328P.
 
 ## Verdrahtung (Flipper GPIO → LGT8F328P, 3,3 V)
 | Signal | Flipper-Pin | Port | → LGT |
@@ -83,10 +85,14 @@ gibt es bewusst keinen Dump-Modus.
 | `lgt_isp_10px.png` | App-Icon (10×10, 1-bit) |
 
 ## Changelog
+- **0.2.4** — Fix: Haenger beim VERLASSEN des USB-Modus. USB-Start/Stop laufen
+  jetzt in den view-enter/exit-Callbacks (wie die offizielle App), nicht mehr
+  synchron im Back-/Navigations-Callback. USB-Auf/Zu selbst war schon korrekt.
 - **0.2.3** — USB nach offiziellem AVR-ISP-App-Muster: usb_cdc_dual +
   furi_hal_usb_lock + CLI-VCP-Handling, Programmer auf CDC-Kanal 1. Behebt die
   Brick-Ursache (v0.2.x zerstoerte mit usb_cdc_single die aktive CLI-USB-Config).
-  Am PC erscheint ein zweiter COM-Port (Kanal 1).
+  Am PC erscheint ein zweiter COM-Port (Kanal 1). HARDWARE-BESTAETIGT: avrdude
+  flasht+verifiziert einen LGT8F328P ueber USB.
 - **0.2.2** — USB-Stabilitaetsfix: `furi_hal_cdc_receive` raus aus dem IRQ ->
   Worker-Thread (Muster wie usb_uart-Bridge), TX-Flusskontrolle per Semaphore,
   Worker richtet USB selbst ein/ab. Behebt den Haenger aus v0.2.1.
