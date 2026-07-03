@@ -4,19 +4,22 @@ Flasht einen **LGT8F328P** über dessen proprietäres SWD-Protokoll (GPIO-Bitban
 direkt vom Flipper Zero — standalone von SD **oder** per **USB mit avrdude** vom
 PC. Handling im Stil der offiziellen AVR-ISP-Programmer-App.
 
-**Version 0.2.1** · Kategorie: GPIO
+**Version 0.2.3** · Kategorie: GPIO
 
 ## Status — ehrlich
 - Der **SWD-Kern** (`lgt_swd.c`) ist ein *faithful port* aus dem hardware-
   bestätigten `ft2232_lgtisp` (C232HD) — die Framing-Sequenzen sind Byte-für-Byte
   identisch. Die **SD-Flash-Funktion läuft** (vom Nutzer gebaut & getestet).
-- **Der USB-Modus (v0.2.0) ist neu und noch nicht auf Hardware bestätigt.** Er
-  ist die Stelle mit den meisten „unsicheren" Punkten:
-  1. Die **USB-CDC-API-Namen** (`usb_cdc_single`, `furi_hal_cdc_*`) können je
-     Firmware-Zweig minimal abweichen — siehe Kommentar oben in `usb_isp.c`, das
-     ist die einzige anzupassende Stelle.
-  2. Ggf. **CDC-Sendehäppchen** (64 B) / Timing feinjustieren.
-  Der STK500-/LGT-Teil selbst ist SDK-unabhängig und wurde syntaxgeprüft.
+- **USB-Modus (v0.2.3): jetzt exakt nach der offiziellen AVR-ISP-App gebaut.**
+  Der Brick in v0.2.1/0.2.2 kam daher, dass ich mit `usb_cdc_single` die USB-
+  Config zerstoert habe, die die Flipper-CLI/RPC gerade nutzte. Die offizielle
+  App macht es richtig: **`usb_cdc_dual` + `furi_hal_usb_lock()`**, Kanal 0 bleibt
+  die CLI, **Kanal 1** ist der Programmer; die CLI-VCP wird um den Wechsel herum
+  disabled/enabled. Genau das ist jetzt in `usb_isp.c`.
+- Dadurch erscheint am PC ein **zweiter COM-Port** — avrdude nutzt DEN (Kanal 1),
+  nicht den CLI-Port.
+- Ehrlich: noch nicht von mir hardware-getestet, aber es folgt jetzt 1:1 dem
+  Muster einer erwiesenermassen stabilen App. Der SD-Flash-Modus ist unberuehrt.
 
 ## Verdrahtung (Flipper GPIO → LGT8F328P, 3,3 V)
 | Signal | Flipper-Pin | Port | → LGT |
@@ -80,6 +83,13 @@ gibt es bewusst keinen Dump-Modus.
 | `lgt_isp_10px.png` | App-Icon (10×10, 1-bit) |
 
 ## Changelog
+- **0.2.3** — USB nach offiziellem AVR-ISP-App-Muster: usb_cdc_dual +
+  furi_hal_usb_lock + CLI-VCP-Handling, Programmer auf CDC-Kanal 1. Behebt die
+  Brick-Ursache (v0.2.x zerstoerte mit usb_cdc_single die aktive CLI-USB-Config).
+  Am PC erscheint ein zweiter COM-Port (Kanal 1).
+- **0.2.2** — USB-Stabilitaetsfix: `furi_hal_cdc_receive` raus aus dem IRQ ->
+  Worker-Thread (Muster wie usb_uart-Bridge), TX-Flusskontrolle per Semaphore,
+  Worker richtet USB selbst ein/ab. Behebt den Haenger aus v0.2.1.
 - **0.2.1** — Build-Fix: korrektes CDC-Header (`furi_hal_usb_cdc.h`, kein
   `furi_hal_cdc.h`), `furi_hal_cdc_receive` als int32_t; deprecated
   `view_dispatcher_enable_queue` entfernt.

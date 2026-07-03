@@ -24,7 +24,7 @@
 #include "ihex.h"
 #include "usb_isp.h"
 
-#define LGT_ISP_VERSION "0.2.1"
+#define LGT_ISP_VERSION "0.2.3"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
@@ -264,14 +264,14 @@ static const char* ABOUT_TEXT =
 
 static const char* USB_TEXT =
     "USB-Modus aktiv\n"
-    "Flipper = COM-Port\n"
+    "Es erscheint ein ZWEITER\n"
+    "COM-Port (Kanal 1) — den\n"
+    "nehmen, nicht den CLI-Port.\n"
     "\n"
-    "Am PC (avrdude):\n"
     "avrdude -c stk500v1\n"
     "  -p m328p -P <COM>\n"
     "  -U flash:w:sketch.hex:i\n"
     "\n"
-    "Verdrahtung wie im Menue.\n"
     "Meldet sich als 328P.\n"
     "Zurueck = USB beenden";
 
