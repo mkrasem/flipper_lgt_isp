@@ -25,12 +25,12 @@
 #include "ihex.h"
 #include "usb_isp.h"
 
-#define LGT_ISP_VERSION "0.3.1"
+#define LGT_ISP_VERSION "0.3.2"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
 
-typedef enum { ViewMenu, ViewWork, ViewInfo, ViewUsb } ViewId;
+typedef enum { ViewMenu, ViewWork, ViewInfo, ViewUsb, ViewWiring } ViewId;
 typedef enum { EvProgress = 100, EvDone } CustomEvent;
 typedef enum { OpFlash, OpFlashVerify, OpReadId } Op;
 
@@ -48,8 +48,9 @@ typedef struct {
     ViewDispatcher* vd;
     Submenu* menu;
     View* work;                 /* eigener Live-Progress-/Ergebnis-View */
-    Widget* info;               /* scrollbarer Text (Verdrahtung/About) */
+    Widget* info;               /* scrollbarer Text (About) */
     View* usb_view;             /* USB-Modus-Screen (eigener enter/exit-Lifecycle) */
+    View* wiring_view;          /* gezeichneter Verdrahtungsplan */
     UsbIsp* usb;                /* != NULL wenn USB-Modus aktiv */
     DialogsApp* dialogs;
     Storage* storage;
@@ -75,26 +76,55 @@ typedef struct {
     char phase[16];
     char result[64];
     bool finished;
+    bool is_id;   /* Ergebnis eines Chip-ID-Laufs -> Chip-Grafik */
+    bool ok;
 } WorkModel;
 
-/* niedlicher Chip-Mascot (Canvas-Primitive, kein PNG noetig) */
+/* niedlicher Chip-Mascot (Fortschritts-Screen) */
 static void draw_chip(Canvas* c, int x, int y) {
-    canvas_draw_rframe(c, x, y, 28, 24, 3);            /* IC-Koerper */
-    for(int i = 0; i < 4; i++) {                       /* Beinchen */
+    canvas_draw_rframe(c, x, y, 28, 24, 3);
+    for(int i = 0; i < 4; i++) {
         canvas_draw_line(c, x - 3, y + 4 + i * 5, x - 1, y + 4 + i * 5);
         canvas_draw_line(c, x + 28, y + 4 + i * 5, x + 30, y + 4 + i * 5);
     }
-    canvas_draw_line(c, x + 11, y + 1, x + 17, y + 1); /* Kerbe */
-    canvas_draw_disc(c, x + 9, y + 10, 2);             /* Augen */
+    canvas_draw_line(c, x + 11, y + 1, x + 17, y + 1);
+    canvas_draw_disc(c, x + 9, y + 10, 2);
     canvas_draw_disc(c, x + 19, y + 10, 2);
-    canvas_draw_line(c, x + 10, y + 17, x + 18, y + 17); /* Laecheln */
+    canvas_draw_line(c, x + 10, y + 17, x + 18, y + 17);
     canvas_draw_dot(c, x + 9, y + 16);
     canvas_draw_dot(c, x + 19, y + 16);
+}
+
+/* DIP-Chip mit Beinchen oben+unten (wie "chip detected") */
+static void draw_ic(Canvas* c, int x, int y, int w, int h) {
+    int i, n = (w - 6) / 7;
+    canvas_draw_rframe(c, x, y, w, h, 3);
+    for(i = 0; i < n; i++) {
+        int px = x + 6 + i * 7;
+        canvas_draw_line(c, px, y - 2, px, y - 1);
+        canvas_draw_line(c, px, y + h + 1, px, y + h + 2);
+    }
+    canvas_draw_disc(c, x + 5, y + h / 2, 1);   /* Orientierungspunkt */
+}
+
+/* "Chip erkannt"-Screen (Chip-ID-Ergebnis) */
+static void draw_chip_detected(Canvas* c, bool ok, const char* line) {
+    canvas_set_font(c, FontPrimary);
+    canvas_draw_str_aligned(c, 64, 8, AlignCenter, AlignCenter, ok ? "LGT erkannt!" : "Kein LGT");
+    draw_ic(c, 30, 18, 68, 20);
+    canvas_set_font(c, FontSecondary);
+    if(ok) canvas_draw_str_aligned(c, 64, 28, AlignCenter, AlignCenter, "32 Kb");
+    canvas_draw_str_aligned(c, 64, 50, AlignCenter, AlignCenter, line);
+    canvas_draw_str_aligned(c, 64, 61, AlignCenter, AlignCenter, "Zurueck = Menue");
 }
 
 static void work_draw(Canvas* canvas, void* model) {
     WorkModel* m = model;
     canvas_clear(canvas);
+    if(m->finished && m->is_id) {          /* Chip-ID -> hübsche Chip-Grafik */
+        draw_chip_detected(canvas, m->ok, m->result);
+        return;
+    }
     draw_chip(canvas, 6, 30);
     canvas_set_font(canvas, FontPrimary);
     canvas_draw_str(canvas, 44, 12, "LGT ISP");
@@ -127,17 +157,28 @@ static bool nav_exit(void* ctx) {
  * Start/Stop passieren in den view_dispatcher enter/exit-Callbacks, NICHT im
  * Navigations-Callback. Das synchrone Stop (join + USB-Config zurueck) im
  * Back-Handler war die Ursache, warum der Flipper beim Verlassen haengen blieb. */
-static void usb_draw(Canvas* canvas, void* model) {
+static void usb_draw(Canvas* c, void* model) {
     UNUSED(model);
-    canvas_clear(canvas);
-    canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 12, "USB aktiv");
-    draw_chip(canvas, 8, 30);
-    canvas_set_font(canvas, FontSecondary);
-    canvas_draw_str(canvas, 48, 28, "avrdude:");
-    canvas_draw_str(canvas, 48, 39, "stk500v1 / 328P");
-    canvas_draw_str(canvas, 48, 50, "2. COM-Port!");
-    canvas_draw_str(canvas, 2, 63, "Zurueck = beenden");
+    canvas_clear(c);
+    canvas_set_font(c, FontPrimary);
+    canvas_draw_str(c, 34, 10, "ISP aktiv");
+    /* Stecker + Ribbon-Kabel links */
+    canvas_draw_rframe(c, 4, 24, 14, 20, 2);
+    for(int i = 0; i < 7; i++) canvas_draw_line(c, 18, 27 + i * 2, 25, 27 + i * 2);
+    /* SWD-Box Mitte */
+    canvas_draw_rframe(c, 40, 24, 42, 20, 5);
+    canvas_draw_str_aligned(c, 61, 35, AlignCenter, AlignCenter, "SWD");
+    /* Verbindung -> USB-Symbol (angedeuteter Dreizack) */
+    canvas_draw_line(c, 82, 34, 92, 34);
+    canvas_draw_disc(c, 94, 34, 2);
+    canvas_draw_line(c, 96, 34, 113, 34);
+    canvas_draw_line(c, 101, 34, 101, 29);
+    canvas_draw_disc(c, 101, 28, 1);
+    canvas_draw_line(c, 106, 34, 106, 39);
+    canvas_draw_box(c, 105, 39, 3, 3);
+    canvas_draw_box(c, 110, 31, 5, 6);
+    canvas_set_font(c, FontSecondary);
+    canvas_draw_str(c, 2, 62, "avrdude: 2. COM-Port");
 }
 static void usb_enter(void* ctx) {
     App* app = ctx;
@@ -225,6 +266,8 @@ static void start_work(App* app) {
             m->done = 0;
             m->total = 1;
             m->finished = false;
+            m->is_id = (app->op == OpReadId);
+            m->ok = false;
             strncpy(m->phase, "Start", sizeof(m->phase) - 1);
             m->result[0] = 0;
         },
@@ -255,6 +298,7 @@ static bool custom_cb(void* ctx, uint32_t event) {
                 strncpy(m->result, app->w_result, sizeof(m->result) - 1);
                 m->result[sizeof(m->result) - 1] = 0;
                 m->finished = app->w_finished;
+                m->ok = app->w_ok;
                 furi_mutex_release(app->mtx);
             },
             true);
@@ -268,20 +312,28 @@ static bool custom_cb(void* ctx, uint32_t event) {
     return false;
 }
 
-/* ---------- Info-Texte ---------- */
-static const char* WIRING_TEXT =
-    "Verdrahtung (Flipper GPIO -> LGT)\n"
-    "SWC : Pin 2 (PA7) -> SWC\n"
-    "SWD : Pin 3 (PA6) -> SWD\n"
-    "RST : Pin 4 (PA4) -> RSTN\n"
-    "3V3 : Pin 9       -> VCC\n"
-    "GND : Pin 8/11/18 -> GND\n"
-    "\n"
-    "Nur fuer 3,3-V-LGT-Targets.\n"
-    "Header-Pins ggf. gegen die\n"
-    "offizielle Flipper-Belegung\n"
-    "pruefen.";
+/* ---------- gezeichneter Verdrahtungsplan (Flipper GPIO -> LGT) ---------- */
+static void draw_wiring(Canvas* c, void* model) {
+    UNUSED(model);
+    static const char* sig[5] = {"SWC", "SWD", "RST", "3V3", "GND"};
+    static const char* pin[5] = {"P2", "P3", "P4", "P9", "P11"};
+    canvas_clear(c);
+    canvas_set_font(c, FontPrimary);
+    canvas_draw_str(c, 2, 9, "Verdrahtung");
+    canvas_set_font(c, FontSecondary);
+    for(int i = 0; i < 5; i++) {
+        int x = 2 + i * 25;
+        canvas_draw_rframe(c, x, 15, 23, 13, 2);                        /* Signal-Box */
+        canvas_draw_str_aligned(c, x + 11, 22, AlignCenter, AlignCenter, sig[i]);
+        canvas_draw_str_aligned(c, x + 11, 34, AlignCenter, AlignCenter, pin[i]);
+        canvas_draw_line(c, x + 11, 38, x + 11, 45);                    /* Leitung zum Header */
+    }
+    canvas_draw_frame(c, 2, 45, 123, 9);                                /* Header-Leiste */
+    for(int i = 0; i < 5; i++) canvas_draw_box(c, 11 + i * 25, 47, 5, 5);
+    canvas_draw_str(c, 2, 63, "nur 3V3-Targets");
+}
 
+/* ---------- Info-Text (About) ---------- */
 static const char* ABOUT_TEXT =
     "LGT ISP (SWD)  v" LGT_ISP_VERSION "\n"
     "\n"
@@ -337,7 +389,7 @@ static void menu_cb(void* ctx, uint32_t index) {
         view_dispatcher_switch_to_view(app->vd, ViewUsb);   /* enter-Callback startet USB */
         break;
     case ItemWiring:
-        show_info(app, WIRING_TEXT);
+        view_dispatcher_switch_to_view(app->vd, ViewWiring);
         break;
     case ItemAbout:
         show_info(app, ABOUT_TEXT);
@@ -396,6 +448,12 @@ static App* app_alloc(void) {
     view_set_previous_callback(app->usb_view, nav_to_menu);
     view_dispatcher_add_view(app->vd, ViewUsb, app->usb_view);
 
+    /* Verdrahtungs-View (gezeichnet) */
+    app->wiring_view = view_alloc();
+    view_set_draw_callback(app->wiring_view, draw_wiring);
+    view_set_previous_callback(app->wiring_view, nav_to_menu);
+    view_dispatcher_add_view(app->vd, ViewWiring, app->wiring_view);
+
     /* Worker (einmal allokiert, pro Op gestartet/gejoint) */
     app->worker = furi_thread_alloc();
     furi_thread_set_name(app->worker, "LgtIspWorker");
@@ -416,10 +474,12 @@ static void app_free(App* app) {
     view_dispatcher_remove_view(app->vd, ViewWork);
     view_dispatcher_remove_view(app->vd, ViewInfo);
     view_dispatcher_remove_view(app->vd, ViewUsb);
+    view_dispatcher_remove_view(app->vd, ViewWiring);
     submenu_free(app->menu);
     view_free(app->work);
     widget_free(app->info);
     view_free(app->usb_view);
+    view_free(app->wiring_view);
     view_dispatcher_free(app->vd);
     furi_thread_free(app->worker);
 

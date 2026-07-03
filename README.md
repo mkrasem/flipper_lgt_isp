@@ -4,10 +4,11 @@ Flasht einen **LGT8F328P** über dessen proprietäres SWD-Protokoll (GPIO-Bitban
 direkt vom Flipper Zero — standalone von SD **oder** per **USB mit avrdude** vom
 PC. Handling im Stil der offiziellen AVR-ISP-Programmer-App.
 
-**Version 0.3.1** · Kategorie: GPIO
+**Version 0.3.2** · Kategorie: GPIO
 
-Fortschrittsbalken (`elements_progress_bar_with_text`) und ein gezeichneter
-Chip-Mascot fuer etwas Flipper-Niedlichkeit auf den Arbeits-/USB-Screens.
+Gezeichnete Grafiken (Canvas-Primitive, angelehnt an die offizielle App):
+Chip-erkannt-Screen mit DIP-Chip, gezeichneter Verdrahtungsplan mit Pin-Boxen,
+"ISP aktiv"-Screen (Stecker -> SWD -> USB), plus Progress-Balken & Chip-Mascot.
 
 ## Status — ehrlich
 - Der **SWD-Kern** (`lgt_swd.c`) ist ein *faithful port* aus dem hardware-
@@ -97,6 +98,9 @@ gibt es bewusst keinen Dump-Modus.
 | `lgt_isp_10px.png` | App-Icon (10×10, 1-bit) |
 
 ## Changelog
+- **0.3.2** — Mehr gezeichnete Grafik: DIP-Chip beim Chip-ID-Lesen ("LGT erkannt"),
+  Verdrahtung als gezeichneter Pinout (Signal-Boxen SWC/SWD/RST/3V3/GND + Header),
+  USB-Screen als "ISP aktiv" (Stecker -> SWD-Box -> USB-Symbol).
 - **0.3.1** — Dump wieder entfernt: auf dem LGT technisch nicht moeglich (Lese-
   Engine kommt nur nach dem loeschenden Unlock hoch; ein Testdump lieferte nur
   FF). Die Grafik aus 0.3.0 bleibt.
