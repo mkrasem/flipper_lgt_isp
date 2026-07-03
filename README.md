@@ -1,6 +1,6 @@
 # LGT ISP (SWD) — Flipper Zero App
 
-**Version 0.4.1** · Category: GPIO · Bilingual (English / Deutsch)
+**Version 0.5.0** · Category: GPIO · Bilingual (English / Deutsch)
 
 Flashes an **LGT8F328P** over its proprietary SWD protocol (GPIO bit-bang),
 straight from the Flipper Zero — standalone from the SD card **or** over **USB
@@ -20,6 +20,18 @@ the SD card. All drawn screens follow the selected language.
   (`-c stk500v1 -p m328p`) writes and verifies an LGT8F328P over the Flipper.
 - The bilingual UI, drawn graphics, and everything else are built on top of that
   proven core.
+
+### Supported chips
+Built and hardware-verified for the **LGT8F328P** (32 KB flash). The whole
+**LGT8FX8P** family (LGT8F88P / 168P / 328P) shares the *same* proprietary SWD
+programming interface and pinout, so the protocol layer applies family-wide — but
+pick the target in the menu (**Chip:** 328P / 168P / 88P). Selecting a chip sets
+the flash size shown and the signature reported to avrdude, and is remembered on
+the SD card. Only the **328P is hardware-verified**; 168P (16 KB) and 88P (8 KB)
+share the identical SWD protocol but are **untested** (flagged "untested!" on the
+chip-ID and USB screens). The runtime "chip ID" detection stays family-level: the
+SWDID (`3E`/`3F`) only reports that an LGT is present and its lock state, not the
+exact part — so that title says "LGT", not the model.
 
 ### Wiring (Flipper GPIO → LGT8F328P, 3.3 V)
 | Signal | Flipper pin | Port | → LGT |
@@ -68,8 +80,8 @@ About · Language.
 
       avrdude -c stk500v1 -p m328p -P <COM> -U flash:w:sketch.hex:i
 
-  The Flipper reports a 328P signature (`1E 95 0F`) because the LGT8F328P is
-  flash-compatible. **Back** ends USB mode.
+  Use the `-p` that matches the selected chip (`m328p` / `m168p` / `m88p`) — the
+  Flipper reports the corresponding signature. **Back** ends USB mode.
 - **Language** — toggles English/German; stored on the SD card.
 
 ### No dump / read-out (LGT limitation)
@@ -110,6 +122,18 @@ effect a copy protection built into the LGT.)
   Flipper.
 - Die zweisprachige Oberfläche, die gezeichnete Grafik und der Rest bauen auf
   diesem erprobten Kern auf.
+
+### Unterstützte Chips
+Gebaut und hardware-bestätigt für den **LGT8F328P** (32 KB Flash). Die ganze
+**LGT8FX8P**-Familie (LGT8F88P / 168P / 328P) nutzt *dieselbe* proprietäre SWD-
+Schnittstelle und Pinbelegung, die Protokoll-Schicht gilt also familienweit —
+das Ziel wählst du im Menü (**Chip:** 328P / 168P / 88P). Die Wahl setzt die
+angezeigte Flash-Größe und die an avrdude gemeldete Signatur und wird auf der SD
+gemerkt. Nur der **328P ist hardware-bestätigt**; 168P (16 KB) und 88P (8 KB)
+nutzen dasselbe SWD-Protokoll, sind aber **ungetestet** (auf dem Chip-ID- und
+USB-Screen mit „ungetestet!" markiert). Die Laufzeit-Erkennung bleibt familien-
+weit: die SWDID (`3E`/`3F`) sagt nur, dass ein LGT dranhängt und wie der Lock-
+Status ist — nicht das Modell. Darum steht dort „LGT", nicht das Modell.
 
 ### Verdrahtung (Flipper GPIO → LGT8F328P, 3,3 V)
 | Signal | Flipper-Pin | Port | → LGT |
@@ -158,8 +182,8 @@ Verdrahtung · About · Language.
 
       avrdude -c stk500v1 -p m328p -P <COM> -U flash:w:sketch.hex:i
 
-  Der Flipper meldet eine 328P-Signatur (`1E 95 0F`), weil der LGT8F328P
-  flash-kompatibel ist. **Zurück** beendet den USB-Modus.
+  Nimm das `-p`, das zum gewählten Chip passt (`m328p` / `m168p` / `m88p`) — der
+  Flipper meldet die passende Signatur. **Zurück** beendet den USB-Modus.
 - **Language** — schaltet Deutsch/Englisch um; wird auf der SD gespeichert.
 
 ### Kein Dump/Auslesen (LGT-Grenze)
@@ -179,6 +203,12 @@ getestet und liefert konsequent `FF` — das Feature ist bewusst nicht enthalten
 ---
 
 ## Changelog
+- **0.5.0** — Chip selection in the menu (328P / 168P / 88P): sets displayed flash
+  size + avrdude signature, stored on SD. Only 328P is verified; 168P/88P share
+  the protocol but are untested (marked "untested!"). / Chip-Auswahl im Menü.
+- **0.4.2** — Clarified chip scope: built/verified for the LGT8F328P (32K); the
+  LGT8FX8P family (88P/168P) shares the SWD protocol but is untested (flash size +
+  signature are 328P-specific). / Chip-Umfang präzisiert.
 - **0.4.1** — Corrected target-voltage guidance: 3.3 V recommended, 5 V possible
   with a series resistor on SWD (bidirectional line, input-only 5 V-tolerance). /
   Korrigierte Spannungshinweise: 3,3 V empfohlen, 5 V mit Serien-R an SWD.

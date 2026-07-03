@@ -24,8 +24,9 @@
 #include "lgt_swd.h"
 #include "ihex.h"
 #include "usb_isp.h"
+#include "stk500.h"
 
-#define LGT_ISP_VERSION "0.4.1"
+#define LGT_ISP_VERSION "0.5.0"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
@@ -41,13 +42,33 @@ typedef enum {
     ItemUsb,
     ItemWiring,
     ItemAbout,
+    ItemChip,
     ItemLang,
 } MenuItem;
+
+/* ---------- Chip-Auswahl (LGT8FX8P-Familie) ---------- */
+typedef struct {
+    const char* name;    /* "LGT8F328P" */
+    const char* shortn;  /* "328P" */
+    const char* part;    /* avrdude -p, z.B. "m328p" */
+    uint16_t kb;         /* Flash in KB */
+    uint8_t sig[3];      /* an avrdude gemeldete Signatur */
+    bool untested;
+} Chip;
+
+static const Chip CHIPS[] = {
+    {"LGT8F328P", "328P", "m328p", 32, {0x1E, 0x95, 0x0F}, false},
+    {"LGT8F168P", "168P", "m168p", 16, {0x1E, 0x94, 0x0B}, true},
+    {"LGT8F88P",  "88P",  "m88p",  8,  {0x1E, 0x93, 0x0A}, true},
+};
+#define N_CHIPS ((int)(sizeof(CHIPS) / sizeof(CHIPS[0])))
+static int g_chip = 0;
 
 /* ---------- Zweisprachigkeit (DE / EN-GB) ---------- */
 typedef struct {
     const char *menu_flash, *menu_flash_verify, *menu_id, *menu_usb;
-    const char *menu_wiring, *menu_about, *menu_lang;
+    const char *menu_wiring, *menu_about, *menu_lang, *menu_chip;
+    const char *untested;
     const char *phase_start, *phase_write, *phase_verify;
     const char *back_menu;
     const char *detected, *not_detected;
@@ -67,6 +88,8 @@ static const Strings STR_DE = {
     .menu_wiring = "Verdrahtung",
     .menu_about = "About",
     .menu_lang = "Language: English",       /* zeigt die ZIEL-Sprache */
+    .menu_chip = "Chip:",
+    .untested = "ungetestet!",
     .phase_start = "Start",
     .phase_write = "Schreiben",
     .phase_verify = "Verify",
@@ -91,6 +114,10 @@ static const Strings STR_DE = {
              "ft2232_lgtisp (hardware-\n"
              "bestaetigt am C232HD).\n"
              "\n"
+             "Gebaut/getestet fuer 328P\n"
+             "(32K). Gleiche SWD-Familie:\n"
+             "88P/168P (8K/16K) ungetestet.\n"
+             "\n"
              "Achtung: Unlock loescht den\n"
              "Chip immer. Verify nur direkt\n"
              "nach dem Flashen sinnvoll.",
@@ -104,6 +131,8 @@ static const Strings STR_EN = {
     .menu_wiring = "Wiring",
     .menu_about = "About",
     .menu_lang = "Sprache: Deutsch",        /* zeigt die ZIEL-Sprache */
+    .menu_chip = "Chip:",
+    .untested = "untested!",
     .phase_start = "Start",
     .phase_write = "Writing",
     .phase_verify = "Verifying",
@@ -127,6 +156,10 @@ static const Strings STR_EN = {
              "bit-bang). Core ported from\n"
              "ft2232_lgtisp (hardware-\n"
              "verified on a C232HD).\n"
+             "\n"
+             "Built/tested for the 328P\n"
+             "(32K). Same SWD family:\n"
+             "88P/168P (8K/16K) untested.\n"
              "\n"
              "Note: unlocking always erases\n"
              "the chip. Verify is only mean-\n"
@@ -157,6 +190,7 @@ typedef struct {
     uint8_t* img;               /* 32K Flash-Abbild (Heap) */
     uint32_t img_len;
     Op op;
+    char chip_label[24];        /* "Chip: 328P" fuer das Menue */
 
     /* Fortschritt (Worker -> GUI, via mtx) */
     uint32_t w_done, w_total;
@@ -205,13 +239,20 @@ static void draw_ic(Canvas* c, int x, int y, int w, int h) {
 
 /* "Chip erkannt"-Screen (Chip-ID-Ergebnis) */
 static void draw_chip_detected(Canvas* c, bool ok, const char* line) {
+    const Chip* ch = &CHIPS[g_chip];
     canvas_set_font(c, FontPrimary);
     canvas_draw_str_aligned(c, 64, 8, AlignCenter, AlignCenter, ok ? S->detected : S->not_detected);
     draw_ic(c, 30, 18, 68, 20);
     canvas_set_font(c, FontSecondary);
-    if(ok) canvas_draw_str_aligned(c, 64, 28, AlignCenter, AlignCenter, "32 Kb");
-    canvas_draw_str_aligned(c, 64, 50, AlignCenter, AlignCenter, line);
-    canvas_draw_str_aligned(c, 64, 61, AlignCenter, AlignCenter, S->back_menu);
+    if(ok) {
+        char kb[16];
+        snprintf(kb, sizeof(kb), "%s  %u Kb", ch->shortn, ch->kb);
+        canvas_draw_str_aligned(c, 64, 28, AlignCenter, AlignCenter, kb);
+    }
+    canvas_draw_str_aligned(c, 64, 44, AlignCenter, AlignCenter, line);
+    if(ok && ch->untested)
+        canvas_draw_str_aligned(c, 64, 53, AlignCenter, AlignCenter, S->untested);
+    canvas_draw_str_aligned(c, 64, 62, AlignCenter, AlignCenter, S->back_menu);
 }
 
 static void work_draw(Canvas* canvas, void* model) {
@@ -274,10 +315,15 @@ static void usb_draw(Canvas* c, void* model) {
     canvas_draw_box(c, 105, 39, 3, 3);
     canvas_draw_box(c, 110, 31, 5, 6);
     canvas_set_font(c, FontSecondary);
-    canvas_draw_str(c, 2, 62, S->usb_hint);
+    const Chip* ch = &CHIPS[g_chip];
+    char hint[32];
+    snprintf(hint, sizeof(hint), "-p %s  %s", ch->part, ch->untested ? S->untested : "2.COM");
+    canvas_draw_str(c, 2, 62, hint);
 }
 static void usb_enter(void* ctx) {
     App* app = ctx;
+    const Chip* ch = &CHIPS[g_chip];
+    stk500_set_signature(ch->sig[0], ch->sig[1], ch->sig[2]);   /* gewaehlter Chip -> Signatur */
     if(!app->usb) app->usb = usb_isp_start();
 }
 static void usb_exit(void* ctx) {
@@ -444,6 +490,7 @@ static void lang_apply(void) {
 }
 
 static void menu_build(App* app) {
+    snprintf(app->chip_label, sizeof(app->chip_label), "%s %s", S->menu_chip, CHIPS[g_chip].shortn);
     submenu_reset(app->menu);
     submenu_add_item(app->menu, S->menu_flash, ItemFlash, menu_cb, app);
     submenu_add_item(app->menu, S->menu_flash_verify, ItemFlashVerify, menu_cb, app);
@@ -451,6 +498,7 @@ static void menu_build(App* app) {
     submenu_add_item(app->menu, S->menu_usb, ItemUsb, menu_cb, app);
     submenu_add_item(app->menu, S->menu_wiring, ItemWiring, menu_cb, app);
     submenu_add_item(app->menu, S->menu_about, ItemAbout, menu_cb, app);
+    submenu_add_item(app->menu, app->chip_label, ItemChip, menu_cb, app);
     submenu_add_item(app->menu, S->menu_lang, ItemLang, menu_cb, app);
 }
 
@@ -458,8 +506,9 @@ static void lang_load(App* app) {
     File* f = storage_file_alloc(app->storage);
     char b[4] = {0};
     if(storage_file_open(f, LANG_PATH, FSAM_READ, FSOM_OPEN_EXISTING)) {
-        storage_file_read(f, (uint8_t*)b, 2);
+        storage_file_read(f, (uint8_t*)b, 3);
         if(b[0] == 'e' && b[1] == 'n') g_lang_en = true;
+        if(b[2] >= '0' && b[2] < '0' + N_CHIPS) g_chip = b[2] - '0';
     }
     storage_file_close(f);
     storage_file_free(f);
@@ -470,8 +519,8 @@ static void lang_save(App* app) {
     storage_common_mkdir(app->storage, LANG_DIR);
     File* f = storage_file_alloc(app->storage);
     if(storage_file_open(f, LANG_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
-        const char* v = g_lang_en ? "en" : "de";
-        storage_file_write(f, v, 2);
+        char b[3] = {(char)(g_lang_en ? 'e' : 'd'), (char)(g_lang_en ? 'n' : 'e'), (char)('0' + g_chip)};
+        storage_file_write(f, b, 3);
     }
     storage_file_close(f);
     storage_file_free(f);
@@ -517,6 +566,11 @@ static void menu_cb(void* ctx, uint32_t index) {
         break;
     case ItemAbout:
         show_info(app, S->about);
+        break;
+    case ItemChip:
+        g_chip = (g_chip + 1) % N_CHIPS;
+        lang_save(app);
+        menu_build(app);       /* Label aktualisieren */
         break;
     case ItemLang:
         g_lang_en = !g_lang_en;

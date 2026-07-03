@@ -32,7 +32,13 @@
 #define STK_READ_PAGE      0x74
 #define STK_READ_SIGN      0x75
 
-static const uint8_t SIGNATURE[3] = {0x1E, 0x95, 0x0F};   /* 328P (LGT flash-kompatibel) */
+static uint8_t SIGNATURE[3] = {0x1E, 0x95, 0x0F};   /* Standard: 328P; via Setter aenderbar */
+
+void stk500_set_signature(uint8_t s0, uint8_t s1, uint8_t s2) {
+    SIGNATURE[0] = s0;
+    SIGNATURE[1] = s1;
+    SIGNATURE[2] = s2;
+}
 
 static bool gb(Stk500Io* io, uint8_t* b) {
     while(*io->run) {
