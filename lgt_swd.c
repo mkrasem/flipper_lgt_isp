@@ -245,7 +245,7 @@ int lgt_flash(const uint8_t* img, uint32_t img_len, bool verify, LgtProgressCb c
     if(!start_pmode(1)) { end_pmode(); lgt_gpio_deinit(); return -1; }
     for(a = 0; a < img_len; a += LGT_PAGE_BYTES) {
         if(!page_is_empty(img, a)) lgt_write_page(a, &img[a], LGT_PAGE_BYTES);
-        if(cb) cb(ctx, a, img_len, "Schreiben");
+        if(cb) cb(ctx, a, img_len, LGT_PHASE_WRITE);
     }
     if(verify) {
         for(a = 0; a < img_len; a += LGT_PAGE_BYTES) {
@@ -254,7 +254,7 @@ int lgt_flash(const uint8_t* img, uint32_t img_len, bool verify, LgtProgressCb c
             if(page_is_empty(img, a)) continue;
             lgt_read_page(a, rb, LGT_PAGE_BYTES);
             for(j = 0; j < nn; j++) if(rb[j] != img[a + j]) bad++;
-            if(cb) cb(ctx, a, img_len, "Verify");
+            if(cb) cb(ctx, a, img_len, LGT_PHASE_VERIFY);
         }
     }
     end_pmode();
@@ -272,7 +272,7 @@ int lgt_verify(const uint8_t* img, uint32_t img_len, LgtProgressCb cb, void* ctx
         if(page_is_empty(img, a)) continue;
         lgt_read_page(a, rb, LGT_PAGE_BYTES);
         for(j = 0; j < nn; j++) if(rb[j] != img[a + j]) bad++;
-        if(cb) cb(ctx, a, img_len, "Verify");
+        if(cb) cb(ctx, a, img_len, LGT_PHASE_VERIFY);
     }
     end_pmode();
     lgt_gpio_deinit();

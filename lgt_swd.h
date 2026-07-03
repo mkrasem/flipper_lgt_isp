@@ -11,8 +11,10 @@
 #define LGT_FLASH_BYTES 32768u
 #define LGT_PAGE_BYTES  128u
 
-/* Fortschritts-Callback: done/total in Bytes, phase = Text ("Schreiben"/"Verify"/"Lesen"). */
-typedef void (*LgtProgressCb)(void* ctx, uint32_t done, uint32_t total, const char* phase);
+/* Fortschritts-Callback: done/total in Bytes, phase = LGT_PHASE_* (App uebersetzt). */
+#define LGT_PHASE_WRITE  0
+#define LGT_PHASE_VERIFY 1
+typedef void (*LgtProgressCb)(void* ctx, uint32_t done, uint32_t total, int phase);
 
 /* Halbbit-Verzoegerung in Mikrosekunden (Timing-Tuning; Default 2). Kleiner = schneller. */
 void lgt_set_delay_us(uint32_t us);

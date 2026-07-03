@@ -25,7 +25,7 @@
 #include "ihex.h"
 #include "usb_isp.h"
 
-#define LGT_ISP_VERSION "0.3.2"
+#define LGT_ISP_VERSION "0.4.0"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
@@ -41,7 +41,103 @@ typedef enum {
     ItemUsb,
     ItemWiring,
     ItemAbout,
+    ItemLang,
 } MenuItem;
+
+/* ---------- Zweisprachigkeit (DE / EN-GB) ---------- */
+typedef struct {
+    const char *menu_flash, *menu_flash_verify, *menu_id, *menu_usb;
+    const char *menu_wiring, *menu_about, *menu_lang;
+    const char *phase_start, *phase_write, *phase_verify;
+    const char *back_menu;
+    const char *detected, *not_detected;
+    const char *res_no_lgt, *res_unlock, *res_ok_verified, *res_ok_written;
+    const char *res_diff;                   /* printf-Format mit %d */
+    const char *res_bad_hex;
+    const char *usb_title, *usb_hint;
+    const char *wiring_title, *wiring_note;
+    const char *about;
+} Strings;
+
+static const Strings STR_DE = {
+    .menu_flash = "Flash von SD",
+    .menu_flash_verify = "Flash + Verify",
+    .menu_id = "Chip-ID lesen",
+    .menu_usb = "USB (avrdude)",
+    .menu_wiring = "Verdrahtung",
+    .menu_about = "About",
+    .menu_lang = "Language: English",       /* zeigt die ZIEL-Sprache */
+    .phase_start = "Start",
+    .phase_write = "Schreiben",
+    .phase_verify = "Verify",
+    .back_menu = "Zurueck = Menue",
+    .detected = "LGT erkannt!",
+    .not_detected = "Kein LGT",
+    .res_no_lgt = "Kein LGT erkannt",
+    .res_unlock = "Kein LGT / Unlock-Fehler",
+    .res_ok_verified = "OK: verifiziert",
+    .res_ok_written = "OK: geschrieben",
+    .res_diff = "FEHLER: %d Byte diff",
+    .res_bad_hex = "HEX-Datei ungueltig",
+    .usb_title = "ISP aktiv",
+    .usb_hint = "avrdude: 2. COM-Port",
+    .wiring_title = "Verdrahtung",
+    .wiring_note = "nur 3V3-Targets",
+    .about = "LGT ISP (SWD)  v" LGT_ISP_VERSION "\n"
+             "\n"
+             "Flasht LGT8F328P ueber das\n"
+             "proprietaere LGT-SWD (GPIO-\n"
+             "Bitbang). Kern portiert aus\n"
+             "ft2232_lgtisp (hardware-\n"
+             "bestaetigt am C232HD).\n"
+             "\n"
+             "Achtung: Unlock loescht den\n"
+             "Chip immer. Verify nur direkt\n"
+             "nach dem Flashen sinnvoll.",
+};
+
+static const Strings STR_EN = {
+    .menu_flash = "Flash from SD",
+    .menu_flash_verify = "Flash + verify",
+    .menu_id = "Read chip ID",
+    .menu_usb = "USB (avrdude)",
+    .menu_wiring = "Wiring",
+    .menu_about = "About",
+    .menu_lang = "Sprache: Deutsch",        /* zeigt die ZIEL-Sprache */
+    .phase_start = "Start",
+    .phase_write = "Writing",
+    .phase_verify = "Verifying",
+    .back_menu = "Back = menu",
+    .detected = "LGT detected!",
+    .not_detected = "No LGT",
+    .res_no_lgt = "No LGT detected",
+    .res_unlock = "No LGT / unlock failed",
+    .res_ok_verified = "OK: verified",
+    .res_ok_written = "OK: written",
+    .res_diff = "ERROR: %d bytes differ",
+    .res_bad_hex = "Invalid HEX file",
+    .usb_title = "ISP mode active",
+    .usb_hint = "avrdude: use 2nd COM port",
+    .wiring_title = "Wiring",
+    .wiring_note = "3V3 targets only",
+    .about = "LGT ISP (SWD)  v" LGT_ISP_VERSION "\n"
+             "\n"
+             "Flashes the LGT8F328P via its\n"
+             "proprietary SWD protocol (GPIO\n"
+             "bit-bang). Core ported from\n"
+             "ft2232_lgtisp (hardware-\n"
+             "verified on a C232HD).\n"
+             "\n"
+             "Note: unlocking always erases\n"
+             "the chip. Verify is only mean-\n"
+             "ingful right after flashing.",
+};
+
+static const Strings* S = &STR_DE;
+static bool g_lang_en = false;
+
+#define LANG_DIR  "/ext/apps_data/lgt_isp"
+#define LANG_PATH LANG_DIR "/lang"
 
 typedef struct {
     Gui* gui;
@@ -110,12 +206,12 @@ static void draw_ic(Canvas* c, int x, int y, int w, int h) {
 /* "Chip erkannt"-Screen (Chip-ID-Ergebnis) */
 static void draw_chip_detected(Canvas* c, bool ok, const char* line) {
     canvas_set_font(c, FontPrimary);
-    canvas_draw_str_aligned(c, 64, 8, AlignCenter, AlignCenter, ok ? "LGT erkannt!" : "Kein LGT");
+    canvas_draw_str_aligned(c, 64, 8, AlignCenter, AlignCenter, ok ? S->detected : S->not_detected);
     draw_ic(c, 30, 18, 68, 20);
     canvas_set_font(c, FontSecondary);
     if(ok) canvas_draw_str_aligned(c, 64, 28, AlignCenter, AlignCenter, "32 Kb");
     canvas_draw_str_aligned(c, 64, 50, AlignCenter, AlignCenter, line);
-    canvas_draw_str_aligned(c, 64, 61, AlignCenter, AlignCenter, "Zurueck = Menue");
+    canvas_draw_str_aligned(c, 64, 61, AlignCenter, AlignCenter, S->back_menu);
 }
 
 static void work_draw(Canvas* canvas, void* model) {
@@ -137,7 +233,7 @@ static void work_draw(Canvas* canvas, void* model) {
         elements_progress_bar_with_text(canvas, 44, 32, 82, (float)pct / 100.0f, buf);
     } else {
         elements_multiline_text_aligned(canvas, 44, 24, AlignLeft, AlignTop, m->result);
-        canvas_draw_str(canvas, 44, 62, "Zurueck = Menue");
+        canvas_draw_str(canvas, 44, 62, S->back_menu);
     }
 }
 
@@ -161,7 +257,7 @@ static void usb_draw(Canvas* c, void* model) {
     UNUSED(model);
     canvas_clear(c);
     canvas_set_font(c, FontPrimary);
-    canvas_draw_str(c, 34, 10, "ISP aktiv");
+    canvas_draw_str_aligned(c, 76, 8, AlignCenter, AlignCenter, S->usb_title);
     /* Stecker + Ribbon-Kabel links */
     canvas_draw_rframe(c, 4, 24, 14, 20, 2);
     for(int i = 0; i < 7; i++) canvas_draw_line(c, 18, 27 + i * 2, 25, 27 + i * 2);
@@ -178,7 +274,7 @@ static void usb_draw(Canvas* c, void* model) {
     canvas_draw_box(c, 105, 39, 3, 3);
     canvas_draw_box(c, 110, 31, 5, 6);
     canvas_set_font(c, FontSecondary);
-    canvas_draw_str(c, 2, 62, "avrdude: 2. COM-Port");
+    canvas_draw_str(c, 2, 62, S->usb_hint);
 }
 static void usb_enter(void* ctx) {
     App* app = ctx;
@@ -216,12 +312,13 @@ static bool load_hex_file(App* app, const char* path) {
     return ok;
 }
 
-static void progress_cb(void* ctx, uint32_t done, uint32_t total, const char* phase) {
+static void progress_cb(void* ctx, uint32_t done, uint32_t total, int phase) {
     App* app = ctx;
+    const char* p = (phase == LGT_PHASE_VERIFY) ? S->phase_verify : S->phase_write;
     furi_mutex_acquire(app->mtx, FuriWaitForever);
     app->w_done = done;
     app->w_total = total;
-    strncpy(app->w_phase, phase, sizeof(app->w_phase) - 1);
+    strncpy(app->w_phase, p, sizeof(app->w_phase) - 1);
     app->w_phase[sizeof(app->w_phase) - 1] = 0;
     furi_mutex_release(app->mtx);
     view_dispatcher_send_custom_event(app->vd, EvProgress);
@@ -236,7 +333,7 @@ static int32_t worker_thread(void* ctx) {
         if(ok)
             snprintf(app->w_result, sizeof(app->w_result), "ID: %02X %02X %02X %02X", id[0], id[1], id[2], id[3]);
         else
-            snprintf(app->w_result, sizeof(app->w_result), "Kein LGT erkannt");
+            snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_no_lgt);
         app->w_ok = ok;
         app->w_finished = true;
         furi_mutex_release(app->mtx);
@@ -245,11 +342,11 @@ static int32_t worker_thread(void* ctx) {
         int r = lgt_flash(app->img, app->img_len, verify, progress_cb, app);
         furi_mutex_acquire(app->mtx, FuriWaitForever);
         if(r < 0)
-            snprintf(app->w_result, sizeof(app->w_result), "Kein LGT / Unlock-Fehler");
+            snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_unlock);
         else if(r == 0)
-            snprintf(app->w_result, sizeof(app->w_result), verify ? "OK: verifiziert" : "OK: geschrieben");
+            snprintf(app->w_result, sizeof(app->w_result), "%s", verify ? S->res_ok_verified : S->res_ok_written);
         else
-            snprintf(app->w_result, sizeof(app->w_result), "FEHLER: %d Byte diff", r);
+            snprintf(app->w_result, sizeof(app->w_result), S->res_diff, r);
         app->w_ok = (r == 0);
         app->w_finished = true;
         furi_mutex_release(app->mtx);
@@ -268,7 +365,7 @@ static void start_work(App* app) {
             m->finished = false;
             m->is_id = (app->op == OpReadId);
             m->ok = false;
-            strncpy(m->phase, "Start", sizeof(m->phase) - 1);
+            strncpy(m->phase, S->phase_start, sizeof(m->phase) - 1);
             m->result[0] = 0;
         },
         true);
@@ -319,7 +416,7 @@ static void draw_wiring(Canvas* c, void* model) {
     static const char* pin[5] = {"P2", "P3", "P4", "P9", "P11"};
     canvas_clear(c);
     canvas_set_font(c, FontPrimary);
-    canvas_draw_str(c, 2, 9, "Verdrahtung");
+    canvas_draw_str(c, 2, 9, S->wiring_title);
     canvas_set_font(c, FontSecondary);
     for(int i = 0; i < 5; i++) {
         int x = 2 + i * 25;
@@ -330,27 +427,54 @@ static void draw_wiring(Canvas* c, void* model) {
     }
     canvas_draw_frame(c, 2, 45, 123, 9);                                /* Header-Leiste */
     for(int i = 0; i < 5; i++) canvas_draw_box(c, 11 + i * 25, 47, 5, 5);
-    canvas_draw_str(c, 2, 63, "nur 3V3-Targets");
+    canvas_draw_str(c, 2, 63, S->wiring_note);
 }
-
-/* ---------- Info-Text (About) ---------- */
-static const char* ABOUT_TEXT =
-    "LGT ISP (SWD)  v" LGT_ISP_VERSION "\n"
-    "\n"
-    "Flasht LGT8F328P ueber das\n"
-    "proprietaere LGT-SWD (GPIO-\n"
-    "Bitbang). Kern portiert aus\n"
-    "ft2232_lgtisp (hardware-\n"
-    "bestaetigt am C232HD).\n"
-    "\n"
-    "Achtung: Unlock loescht den\n"
-    "Chip immer. Verify nur direkt\n"
-    "nach dem Flashen sinnvoll.";
 
 static void show_info(App* app, const char* text) {
     widget_reset(app->info);
     widget_add_text_scroll_element(app->info, 0, 0, 128, 64, text);
     view_dispatcher_switch_to_view(app->vd, ViewInfo);
+}
+
+/* ---------- Sprache + Menueaufbau ---------- */
+static void menu_cb(void* ctx, uint32_t index);   /* fwd */
+
+static void lang_apply(void) {
+    S = g_lang_en ? &STR_EN : &STR_DE;
+}
+
+static void menu_build(App* app) {
+    submenu_reset(app->menu);
+    submenu_add_item(app->menu, S->menu_flash, ItemFlash, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_flash_verify, ItemFlashVerify, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_id, ItemReadId, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_usb, ItemUsb, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_wiring, ItemWiring, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_about, ItemAbout, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_lang, ItemLang, menu_cb, app);
+}
+
+static void lang_load(App* app) {
+    File* f = storage_file_alloc(app->storage);
+    char b[4] = {0};
+    if(storage_file_open(f, LANG_PATH, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        storage_file_read(f, (uint8_t*)b, 2);
+        if(b[0] == 'e' && b[1] == 'n') g_lang_en = true;
+    }
+    storage_file_close(f);
+    storage_file_free(f);
+    lang_apply();
+}
+
+static void lang_save(App* app) {
+    storage_common_mkdir(app->storage, LANG_DIR);
+    File* f = storage_file_alloc(app->storage);
+    if(storage_file_open(f, LANG_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        const char* v = g_lang_en ? "en" : "de";
+        storage_file_write(f, v, 2);
+    }
+    storage_file_close(f);
+    storage_file_free(f);
 }
 
 /* ---------- Menue ---------- */
@@ -370,7 +494,7 @@ static void menu_cb(void* ctx, uint32_t index) {
                 start_work(app);
             } else {
                 furi_mutex_acquire(app->mtx, FuriWaitForever);
-                snprintf(app->w_result, sizeof(app->w_result), "HEX-Datei ungueltig");
+                snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_bad_hex);
                 app->w_ok = false;
                 app->w_finished = true;
                 furi_mutex_release(app->mtx);
@@ -392,7 +516,13 @@ static void menu_cb(void* ctx, uint32_t index) {
         view_dispatcher_switch_to_view(app->vd, ViewWiring);
         break;
     case ItemAbout:
-        show_info(app, ABOUT_TEXT);
+        show_info(app, S->about);
+        break;
+    case ItemLang:
+        g_lang_en = !g_lang_en;
+        lang_apply();
+        lang_save(app);
+        menu_build(app);       /* Menue in neuer Sprache neu aufbauen */
         break;
     default:
         break;
@@ -416,14 +546,10 @@ static App* app_alloc(void) {
     view_dispatcher_set_custom_event_callback(app->vd, custom_cb);
     view_dispatcher_set_navigation_event_callback(app->vd, nav_exit);
 
-    /* Menue */
+    /* Sprache laden + Menue aufbauen */
     app->menu = submenu_alloc();
-    submenu_add_item(app->menu, "Flash von SD", ItemFlash, menu_cb, app);
-    submenu_add_item(app->menu, "Flash + Verify", ItemFlashVerify, menu_cb, app);
-    submenu_add_item(app->menu, "Chip-ID lesen", ItemReadId, menu_cb, app);
-    submenu_add_item(app->menu, "USB (avrdude)", ItemUsb, menu_cb, app);
-    submenu_add_item(app->menu, "Verdrahtung", ItemWiring, menu_cb, app);
-    submenu_add_item(app->menu, "About", ItemAbout, menu_cb, app);
+    lang_load(app);
+    menu_build(app);
     view_dispatcher_add_view(app->vd, ViewMenu, submenu_get_view(app->menu));
 
     /* Work-View */
