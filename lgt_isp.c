@@ -25,7 +25,7 @@
 #include "ihex.h"
 #include "usb_isp.h"
 
-#define LGT_ISP_VERSION "0.4.0"
+#define LGT_ISP_VERSION "0.4.1"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
@@ -82,7 +82,7 @@ static const Strings STR_DE = {
     .usb_title = "ISP aktiv",
     .usb_hint = "avrdude: 2. COM-Port",
     .wiring_title = "Verdrahtung",
-    .wiring_note = "nur 3V3-Targets",
+    .wiring_note = "3V3 (Pin9) empfohlen",
     .about = "LGT ISP (SWD)  v" LGT_ISP_VERSION "\n"
              "\n"
              "Flasht LGT8F328P ueber das\n"
@@ -119,7 +119,7 @@ static const Strings STR_EN = {
     .usb_title = "ISP mode active",
     .usb_hint = "avrdude: use 2nd COM port",
     .wiring_title = "Wiring",
-    .wiring_note = "3V3 targets only",
+    .wiring_note = "3V3 (pin 9) preferred",
     .about = "LGT ISP (SWD)  v" LGT_ISP_VERSION "\n"
              "\n"
              "Flashes the LGT8F328P via its\n"

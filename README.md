@@ -1,6 +1,6 @@
 # LGT ISP (SWD) — Flipper Zero App
 
-**Version 0.4.0** · Category: GPIO · Bilingual (English / Deutsch)
+**Version 0.4.1** · Category: GPIO · Bilingual (English / Deutsch)
 
 Flashes an **LGT8F328P** over its proprietary SWD protocol (GPIO bit-bang),
 straight from the Flipper Zero — standalone from the SD card **or** over **USB
@@ -30,8 +30,22 @@ the SD card. All drawn screens follow the selected language.
 | +3V3   | 9           | —    | VCC   |
 | GND    | 11          | —    | GND   |
 
-3.3 V targets only. Pins can be changed at the top of `lgt_swd.c`. The app also
-draws this pinout under **Wiring**.
+Pins can be changed at the top of `lgt_swd.c`. The app also draws this pinout
+under **Wiring**.
+
+**Target voltage.** The Flipper drives its I/O at 3.3 V; inputs are 5 V-tolerant
+(via 51 Ω series resistors) **but only in input mode** — a pin configured as an
+output must not see 5 V.
+- **3.3 V target (recommended):** power the LGT from pin 9. Simplest and fully
+  safe. The LGT8F328P runs at 1.8–5.5 V, so flashing at 3.3 V is fine even if the
+  chip later runs at 5 V in-circuit.
+- **5 V target:** possible, but note that SWD is *bidirectional* — the SWD pin
+  alternates between output and input, and the 5 V-tolerance is input-only. Unlike
+  the (unidirectional) AVR-ISP app, where MISO is always an input, a 5 V LGT can
+  briefly put 5 V onto a pin that is momentarily an output during bus turnaround.
+  If you must flash at 5 V, add a **series resistor (~330 Ω–1 kΩ) in the SWD line**
+  to limit turnaround contention, and power from pin 1 (enable "5V on GPIO" in the
+  Flipper's GPIO menu first).
 
 ### Build & install
 With **ufbt** (recommended) or `fbt` in a firmware tree:
@@ -106,8 +120,22 @@ effect a copy protection built into the LGT.)
 | +3V3   | 9           | —    | VCC   |
 | GND    | 11          | —    | GND   |
 
-Nur 3,3-V-Targets. Pins oben in `lgt_swd.c` änderbar. Die App zeichnet diesen
-Pinout auch unter **Verdrahtung**.
+Pins oben in `lgt_swd.c` änderbar. Die App zeichnet diesen Pinout auch unter
+**Verdrahtung**.
+
+**Target-Spannung.** Der Flipper treibt seine I/O mit 3,3 V; Eingänge sind
+5-V-tolerant (über 51-Ω-Serienwiderstände) **aber nur im Eingangsmodus** — ein
+als Ausgang konfigurierter Pin darf keine 5 V sehen.
+- **3,3-V-Target (empfohlen):** LGT aus Pin 9 versorgen. Am einfachsten und sicher.
+  Der LGT8F328P läuft 1,8–5,5 V, Flashen mit 3,3 V ist also selbst dann in Ordnung,
+  wenn der Chip später mit 5 V im Einsatz ist.
+- **5-V-Target:** möglich, aber SWD ist *bidirektional* — der SWD-Pin wechselt
+  zwischen Aus- und Eingang, und die 5-V-Toleranz gilt nur für Eingänge. Anders als
+  bei der (unidirektionalen) AVR-ISP-App, wo MISO immer Eingang ist, kann ein 5-V-
+  LGT beim Bus-Turnaround kurz 5 V auf einen gerade als Ausgang geschalteten Pin
+  legen. Wenn du bei 5 V flashen musst: einen **Serienwiderstand (~330 Ω–1 kΩ) in
+  die SWD-Leitung** (begrenzt den Kontentionsstrom) und aus Pin 1 versorgen (vorher
+  „5V on GPIO" im GPIO-Menü aktivieren).
 
 ### Bauen & Installieren
 Mit **ufbt** (empfohlen) oder `fbt` im Firmware-Baum:
@@ -151,6 +179,9 @@ getestet und liefert konsequent `FF` — das Feature ist bewusst nicht enthalten
 ---
 
 ## Changelog
+- **0.4.1** — Corrected target-voltage guidance: 3.3 V recommended, 5 V possible
+  with a series resistor on SWD (bidirectional line, input-only 5 V-tolerance). /
+  Korrigierte Spannungshinweise: 3,3 V empfohlen, 5 V mit Serien-R an SWD.
 - **0.4.0** — Bilingual UI (English / Deutsch), switchable in the menu and stored
   on the SD card (`/ext/apps_data/lgt_isp/lang`); all drawn screens localised. /
   Zweisprachige Oberfläche, im Menü umschaltbar und auf SD gemerkt.
