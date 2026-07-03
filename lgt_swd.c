@@ -291,3 +291,20 @@ int lgt_dump(uint8_t* out, LgtProgressCb cb, void* ctx) {
     lgt_gpio_deinit();
     return 0;
 }
+
+/* --- persistente pmode-Session fuer STK500/USB --- */
+bool lgt_pmode_enter(void) {
+    lgt_gpio_init();
+    if(!start_pmode(1)) { end_pmode(); lgt_gpio_deinit(); return false; }
+    return true;
+}
+void lgt_pmode_leave(void) {
+    end_pmode();
+    lgt_gpio_deinit();
+}
+void lgt_page_write(uint32_t byteAddr, const uint8_t* buf, int size) {
+    lgt_write_page(byteAddr, buf, size);
+}
+void lgt_page_read(uint32_t byteAddr, uint8_t* buf, int size) {
+    lgt_read_page(byteAddr, buf, size);
+}

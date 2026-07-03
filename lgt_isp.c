@@ -22,13 +22,14 @@
 
 #include "lgt_swd.h"
 #include "ihex.h"
+#include "usb_isp.h"
 
-#define LGT_ISP_VERSION "0.1.0"
+#define LGT_ISP_VERSION "0.2.0"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
 
-typedef enum { ViewMenu, ViewWork, ViewInfo } ViewId;
+typedef enum { ViewMenu, ViewWork, ViewInfo, ViewUsb } ViewId;
 typedef enum { EvProgress = 100, EvDone } CustomEvent;
 typedef enum { OpFlash, OpFlashVerify, OpReadId } Op;
 
@@ -36,6 +37,7 @@ typedef enum {
     ItemFlash,
     ItemFlashVerify,
     ItemReadId,
+    ItemUsb,
     ItemWiring,
     ItemAbout,
 } MenuItem;
@@ -46,6 +48,8 @@ typedef struct {
     Submenu* menu;
     View* work;                 /* eigener Live-Progress-/Ergebnis-View */
     Widget* info;               /* scrollbarer Text (Verdrahtung/About) */
+    Widget* usbview;            /* USB-Modus-Screen */
+    UsbIsp* usb;                /* != NULL wenn USB-Modus aktiv */
     DialogsApp* dialogs;
     Storage* storage;
     NotificationApp* notif;
@@ -101,6 +105,16 @@ static bool nav_exit(void* ctx) {
     App* app = ctx;
     view_dispatcher_stop(app->vd);
     return true;
+}
+
+/* Back im USB-View -> USB-Modus beenden, zurueck ins Menue */
+static uint32_t usb_back(void* ctx) {
+    App* app = ctx;
+    if(app->usb) {
+        usb_isp_stop(app->usb);
+        app->usb = NULL;
+    }
+    return ViewMenu;
 }
 
 /* ---------- HEX von SD laden ---------- */
@@ -248,6 +262,19 @@ static const char* ABOUT_TEXT =
     "Chip immer. Verify nur direkt\n"
     "nach dem Flashen sinnvoll.";
 
+static const char* USB_TEXT =
+    "USB-Modus aktiv\n"
+    "Flipper = COM-Port\n"
+    "\n"
+    "Am PC (avrdude):\n"
+    "avrdude -c stk500v1\n"
+    "  -p m328p -P <COM>\n"
+    "  -U flash:w:sketch.hex:i\n"
+    "\n"
+    "Verdrahtung wie im Menue.\n"
+    "Meldet sich als 328P.\n"
+    "Zurueck = USB beenden";
+
 static void show_info(App* app, const char* text) {
     widget_reset(app->info);
     widget_add_text_scroll_element(app->info, 0, 0, 128, 64, text);
@@ -286,6 +313,12 @@ static void menu_cb(void* ctx, uint32_t index) {
         app->op = OpReadId;
         start_work(app);
         break;
+    case ItemUsb:
+        app->usb = usb_isp_start();
+        widget_reset(app->usbview);
+        widget_add_text_scroll_element(app->usbview, 0, 0, 128, 64, USB_TEXT);
+        view_dispatcher_switch_to_view(app->vd, ViewUsb);
+        break;
     case ItemWiring:
         show_info(app, WIRING_TEXT);
         break;
@@ -320,6 +353,7 @@ static App* app_alloc(void) {
     submenu_add_item(app->menu, "Flash von SD", ItemFlash, menu_cb, app);
     submenu_add_item(app->menu, "Flash + Verify", ItemFlashVerify, menu_cb, app);
     submenu_add_item(app->menu, "Chip-ID lesen", ItemReadId, menu_cb, app);
+    submenu_add_item(app->menu, "USB (avrdude)", ItemUsb, menu_cb, app);
     submenu_add_item(app->menu, "Verdrahtung", ItemWiring, menu_cb, app);
     submenu_add_item(app->menu, "About", ItemAbout, menu_cb, app);
     view_dispatcher_add_view(app->vd, ViewMenu, submenu_get_view(app->menu));
@@ -337,6 +371,12 @@ static App* app_alloc(void) {
     view_set_previous_callback(widget_get_view(app->info), nav_to_menu);
     view_dispatcher_add_view(app->vd, ViewInfo, widget_get_view(app->info));
 
+    /* USB-Modus-Widget (eigener Back-Handler beendet USB) */
+    app->usbview = widget_alloc();
+    view_set_context(widget_get_view(app->usbview), app);
+    view_set_previous_callback(widget_get_view(app->usbview), usb_back);
+    view_dispatcher_add_view(app->vd, ViewUsb, widget_get_view(app->usbview));
+
     /* Worker (einmal allokiert, pro Op gestartet/gejoint) */
     app->worker = furi_thread_alloc();
     furi_thread_set_name(app->worker, "LgtIspWorker");
@@ -349,12 +389,18 @@ static App* app_alloc(void) {
 }
 
 static void app_free(App* app) {
+    if(app->usb) {
+        usb_isp_stop(app->usb);
+        app->usb = NULL;
+    }
     view_dispatcher_remove_view(app->vd, ViewMenu);
     view_dispatcher_remove_view(app->vd, ViewWork);
     view_dispatcher_remove_view(app->vd, ViewInfo);
+    view_dispatcher_remove_view(app->vd, ViewUsb);
     submenu_free(app->menu);
     view_free(app->work);
     widget_free(app->info);
+    widget_free(app->usbview);
     view_dispatcher_free(app->vd);
     furi_thread_free(app->worker);
 

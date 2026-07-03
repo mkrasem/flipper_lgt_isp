@@ -29,3 +29,10 @@ int  lgt_dump(uint8_t* out /* >= LGT_FLASH_BYTES */, LgtProgressCb cb, void* ctx
 
 /* Nur die Chip-ID lesen (kein Erase). true = LGT erkannt, id[0]=0x3E/0x3F. */
 bool lgt_read_id(uint8_t id[4]);
+
+/* --- Low-Level fuer STK500/USB (persistente Programmiermodus-Session) ---
+ * Zwischen enter/leave koennen beliebig viele page_write/page_read erfolgen. */
+bool lgt_pmode_enter(void);   /* GPIO-Init + Reset + Unlock(+Erase). true = im Progmode. */
+void lgt_pmode_leave(void);   /* Progmode verlassen + GPIO freigeben. */
+void lgt_page_write(uint32_t byteAddr, const uint8_t* buf, int size);
+void lgt_page_read(uint32_t byteAddr, uint8_t* buf, int size);
