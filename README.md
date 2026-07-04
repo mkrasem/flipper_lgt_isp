@@ -1,10 +1,11 @@
 # LGT ISP (SWD) — Flipper Zero App
 
-**Version 0.5.0** · Category: GPIO · Bilingual (English / Deutsch)
+**Version 0.6.0** · Category: GPIO · Bilingual (English / Deutsch)
 
 Flashes an **LGT8F328P** over its proprietary SWD protocol (GPIO bit-bang),
-straight from the Flipper Zero — standalone from the SD card **or** over **USB
-with avrdude**. Handling modelled on the official AVR ISP Programmer app.
+straight from the Flipper Zero — standalone from the SD card, over **USB
+with avrdude**, or over **BLE-serial with avrdude** (via a PC-side bridge).
+Handling modelled on the official AVR ISP Programmer app.
 
 The UI language (English / German) is switchable in the menu and remembered on
 the SD card. All drawn screens follow the selected language.
@@ -16,7 +17,8 @@ the SD card. All drawn screens follow the selected language.
 ### Status
 - The **SWD core** (`lgt_swd.c`) is a faithful port of the hardware-verified
   `ft2232_lgtisp` (C232HD) — the framing sequences are byte-for-byte identical.
-- **SD flashing** and **USB flashing** are hardware-verified: avrdude
+- **SD flashing**, **USB flashing** and **BLE flashing** are hardware-verified:
+  the BLE STK500 round-trip (`30 20` -> `14 10`) was confirmed with nRF Connect. avrdude
   (`-c stk500v1 -p m328p`) writes and verifies an LGT8F328P over the Flipper.
 - The bilingual UI, drawn graphics, and everything else are built on top of that
   proven core.
@@ -69,7 +71,7 @@ Or copy the built `lgt_isp.fap` to `SD:/apps/GPIO/`. The app shows up under
 **Apps → GPIO → LGT ISP (SWD)**.
 
 ### Usage
-Menu: Flash from SD · Flash + verify · Read chip ID · USB (avrdude) · Wiring ·
+Menu: Flash from SD · Flash + verify · Read chip ID · USB (avrdude) · BLE (avrdude) · Wiring ·
 About · Language.
 
 - **Flash from SD** — pick a `.hex`, then unlock + erase + write.
@@ -82,6 +84,21 @@ About · Language.
 
   Use the `-p` that matches the selected chip (`m328p` / `m168p` / `m88p`) — the
   Flipper reports the corresponding signature. **Back** ends USB mode.
+- **BLE (avrdude)** — same STK500 slave, but over a BLE-serial channel instead of
+  USB (**hardware-verified**: `30 20` -> `14 10` round-trip via nRF Connect). The screen
+  shows connection state and a live **RX counter/activity bar**. Needs the channel reclaim
+  on connect (the Bt service re-activates RPC otherwise) — handled in `ble_isp.c`.
+  avrdude still needs a serial port, so on the PC a **BLE-serial ↔ virtual COM
+  bridge** is required (Nordic-UART style); then:
+
+      avrdude -c stk500v1 -p m328p -P <bridged-COM> -U flash:w:sketch.hex:i
+
+  The bit-banging runs locally on the Flipper — BLE only carries STK500 page
+  commands, never individual SWD bits (so it stays reliable, if slow). **Back**
+  ends BLE mode and restores the default (mobile-app) BLE profile.
+  *Note:* the firmware BLE-serial API is version-sensitive; the four `<<BLE>>`
+  calls in `ble_isp.c` may need matching to your firmware, and `requires=["bt"]`
+  must be present. See the header comment in `ble_isp.c`.
 - **Language** — toggles English/German; stored on the SD card.
 
 ### No dump / read-out (LGT limitation)
@@ -102,10 +119,11 @@ effect a copy protection built into the LGT.)
 | File | Purpose |
 |------|---------|
 | `application.fam` | Flipper app manifest (version, category, icon) |
-| `lgt_isp.c` | App: GUI (menu / progress / drawn screens / USB) + worker + i18n |
+| `lgt_isp.c` | App: GUI (menu / progress / drawn screens / USB / BLE) + worker + i18n |
 | `lgt_swd.c/.h` | LGT-SWD protocol (GPIO bit-bang), port of ft2232_lgtisp |
 | `stk500.c/.h` | STK500v1 slave (avrdude commands → LGT), SDK-independent |
 | `usb_isp.c/.h` | USB-CDC glue + STK500 worker |
+| `ble_isp.c/.h` | BLE-serial glue + STK500 worker (drop-in twin of `usb_isp`) |
 | `ihex.c/.h` | Intel HEX parser/builder |
 | `lgt_isp_10px.png` | App icon (10×10, 1-bit) |
 

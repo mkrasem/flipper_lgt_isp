@@ -6,14 +6,15 @@ App(
     stack_size=2 * 1024,
     fap_category="GPIO",
     # Versionierung: (MAJOR, MINOR). Patch-Stand steht in LGT_ISP_VERSION (About-Screen).
-    fap_version=(0, 5),
+    fap_version=(0, 6),
     fap_icon="lgt_isp_10px.png",
-    fap_description="LGT8F328P programmer over its proprietary SWD (GPIO bit-bang). Flash/verify from SD or via avrdude over USB. Bilingual DE/EN.",
+    fap_description="LGT8F328P programmer over its proprietary SWD (GPIO bit-bang). Flash/verify from SD or via avrdude over USB or BLE-serial. Bilingual DE/EN.",
     fap_author="SimonE / ft2232_lgtisp port",
     requires=[
         "gui",
         "storage",
         "dialogs",
         "notification",
+        "bt",
     ],
 )

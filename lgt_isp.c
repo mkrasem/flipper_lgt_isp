@@ -24,14 +24,15 @@
 #include "lgt_swd.h"
 #include "ihex.h"
 #include "usb_isp.h"
+#include "ble_isp.h"
 #include "stk500.h"
 
-#define LGT_ISP_VERSION "0.5.0"
+#define LGT_ISP_VERSION "0.6.3"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
 
-typedef enum { ViewMenu, ViewWork, ViewInfo, ViewUsb, ViewWiring } ViewId;
+typedef enum { ViewMenu, ViewWork, ViewInfo, ViewUsb, ViewBle, ViewWiring } ViewId;
 typedef enum { EvProgress = 100, EvDone } CustomEvent;
 typedef enum { OpFlash, OpFlashVerify, OpReadId } Op;
 
@@ -40,6 +41,7 @@ typedef enum {
     ItemFlashVerify,
     ItemReadId,
     ItemUsb,
+    ItemBle,
     ItemWiring,
     ItemAbout,
     ItemChip,
@@ -76,6 +78,7 @@ typedef struct {
     const char *res_diff;                   /* printf-Format mit %d */
     const char *res_bad_hex;
     const char *usb_title, *usb_hint;
+    const char *menu_ble, *ble_title, *ble_hint;
     const char *wiring_title, *wiring_note;
     const char *about;
 } Strings;
@@ -104,6 +107,9 @@ static const Strings STR_DE = {
     .res_bad_hex = "HEX-Datei ungueltig",
     .usb_title = "ISP aktiv",
     .usb_hint = "avrdude: 2. COM-Port",
+    .menu_ble = "BLE (avrdude)",
+    .ble_title = "BLE ISP aktiv",
+    .ble_hint = "avrdude via BLE-Bruecke",
     .wiring_title = "Verdrahtung",
     .wiring_note = "3V3 (Pin9) empfohlen",
     .about = "LGT ISP (SWD)  v" LGT_ISP_VERSION "\n"
@@ -147,6 +153,9 @@ static const Strings STR_EN = {
     .res_bad_hex = "Invalid HEX file",
     .usb_title = "ISP mode active",
     .usb_hint = "avrdude: use 2nd COM port",
+    .menu_ble = "BLE (avrdude)",
+    .ble_title = "BLE ISP active",
+    .ble_hint = "avrdude via BLE bridge",
     .wiring_title = "Wiring",
     .wiring_note = "3V3 (pin 9) preferred",
     .about = "LGT ISP (SWD)  v" LGT_ISP_VERSION "\n"
@@ -179,8 +188,11 @@ typedef struct {
     View* work;                 /* eigener Live-Progress-/Ergebnis-View */
     Widget* info;               /* scrollbarer Text (About) */
     View* usb_view;             /* USB-Modus-Screen (eigener enter/exit-Lifecycle) */
+    View* ble_view;             /* BLE-Modus-Screen (eigener enter/exit-Lifecycle) */
     View* wiring_view;          /* gezeichneter Verdrahtungsplan */
     UsbIsp* usb;                /* != NULL wenn USB-Modus aktiv */
+    BleIsp* ble;                /* != NULL wenn BLE-Modus aktiv */
+    FuriTimer* ble_timer;       /* periodisches Redraw der RX-Anzeige */
     DialogsApp* dialogs;
     Storage* storage;
     NotificationApp* notif;
@@ -331,6 +343,70 @@ static void usb_exit(void* ctx) {
     if(app->usb) {
         usb_isp_stop(app->usb);
         app->usb = NULL;
+    }
+}
+
+/* ---------- BLE-Modus-View (avrdude ueber BLE-Serial) ---------- */
+typedef struct {
+    uint32_t rx;        /* ueber BLE empfangene Bytes */
+    bool connected;
+} BleModel;
+
+/* kleines Bluetooth-Runensymbol */
+static void draw_bt_rune(Canvas* c, int x, int y) {
+    int cx = x + 6, top = y, bot = y + 20;
+    canvas_draw_line(c, cx, top, cx, bot);
+    canvas_draw_line(c, cx, top, cx + 6, top + 5);
+    canvas_draw_line(c, cx + 6, top + 5, x, y + 15);
+    canvas_draw_line(c, cx, bot, cx + 6, bot - 5);
+    canvas_draw_line(c, cx + 6, bot - 5, x, y + 5);
+}
+
+static void ble_draw(Canvas* c, void* model) {
+    BleModel* m = model;
+    canvas_clear(c);
+    canvas_set_font(c, FontPrimary);
+    canvas_draw_str_aligned(c, 76, 8, AlignCenter, AlignCenter, S->ble_title);
+    draw_bt_rune(c, 8, 22);
+    canvas_draw_rframe(c, 44, 24, 42, 20, 5);
+    canvas_draw_str_aligned(c, 65, 35, AlignCenter, AlignCenter, "SWD");
+    canvas_set_font(c, FontSecondary);
+    canvas_draw_str(c, 2, 53, m->connected ? "verbunden" : "advertising...");
+    char rx[24];
+    snprintf(rx, sizeof(rx), "RX %lu B", (unsigned long)m->rx);
+    canvas_draw_str_aligned(c, 126, 53, AlignRight, AlignBottom, rx);
+    /* Empfangs-Balken: wandert je 4KB (Aktivitaet, kein fixes Ziel) */
+    float frac = (float)(m->rx % 4096u) / 4096.0f;
+    elements_progress_bar(c, 2, 56, 124, frac);
+}
+
+static void ble_tick(void* ctx) {
+    App* app = ctx;
+    uint32_t rx = app->ble ? ble_isp_rx_bytes(app->ble) : 0;
+    bool conn = app->ble ? ble_isp_connected(app->ble) : false;
+    with_view_model(
+        app->ble_view, BleModel * m, {
+            m->rx = rx;
+            m->connected = conn;
+        }, true);
+}
+
+static void ble_enter(void* ctx) {
+    App* app = ctx;
+    const Chip* ch = &CHIPS[g_chip];
+    stk500_set_signature(ch->sig[0], ch->sig[1], ch->sig[2]);
+    if(!app->ble) app->ble = ble_isp_start();
+    if(!app->ble_timer)
+        app->ble_timer = furi_timer_alloc(ble_tick, FuriTimerTypePeriodic, app);
+    furi_timer_start(app->ble_timer, furi_ms_to_ticks(250));
+}
+
+static void ble_exit(void* ctx) {
+    App* app = ctx;
+    if(app->ble_timer) furi_timer_stop(app->ble_timer);
+    if(app->ble) {
+        ble_isp_stop(app->ble);
+        app->ble = NULL;
     }
 }
 
@@ -496,6 +572,7 @@ static void menu_build(App* app) {
     submenu_add_item(app->menu, S->menu_flash_verify, ItemFlashVerify, menu_cb, app);
     submenu_add_item(app->menu, S->menu_id, ItemReadId, menu_cb, app);
     submenu_add_item(app->menu, S->menu_usb, ItemUsb, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_ble, ItemBle, menu_cb, app);
     submenu_add_item(app->menu, S->menu_wiring, ItemWiring, menu_cb, app);
     submenu_add_item(app->menu, S->menu_about, ItemAbout, menu_cb, app);
     submenu_add_item(app->menu, app->chip_label, ItemChip, menu_cb, app);
@@ -560,6 +637,9 @@ static void menu_cb(void* ctx, uint32_t index) {
         break;
     case ItemUsb:
         view_dispatcher_switch_to_view(app->vd, ViewUsb);   /* enter-Callback startet USB */
+        break;
+    case ItemBle:
+        view_dispatcher_switch_to_view(app->vd, ViewBle);   /* enter-Callback startet BLE */
         break;
     case ItemWiring:
         view_dispatcher_switch_to_view(app->vd, ViewWiring);
@@ -628,6 +708,16 @@ static App* app_alloc(void) {
     view_set_previous_callback(app->usb_view, nav_to_menu);
     view_dispatcher_add_view(app->vd, ViewUsb, app->usb_view);
 
+    /* BLE-Modus-View (Live-RX-Anzeige via periodischem Timer) */
+    app->ble_view = view_alloc();
+    view_allocate_model(app->ble_view, ViewModelTypeLocking, sizeof(BleModel));
+    view_set_context(app->ble_view, app);
+    view_set_draw_callback(app->ble_view, ble_draw);
+    view_set_enter_callback(app->ble_view, ble_enter);
+    view_set_exit_callback(app->ble_view, ble_exit);
+    view_set_previous_callback(app->ble_view, nav_to_menu);
+    view_dispatcher_add_view(app->vd, ViewBle, app->ble_view);
+
     /* Verdrahtungs-View (gezeichnet) */
     app->wiring_view = view_alloc();
     view_set_draw_callback(app->wiring_view, draw_wiring);
@@ -650,15 +740,22 @@ static void app_free(App* app) {
         usb_isp_stop(app->usb);
         app->usb = NULL;
     }
+    if(app->ble) {
+        ble_isp_stop(app->ble);
+        app->ble = NULL;
+    }
+    if(app->ble_timer) furi_timer_free(app->ble_timer);
     view_dispatcher_remove_view(app->vd, ViewMenu);
     view_dispatcher_remove_view(app->vd, ViewWork);
     view_dispatcher_remove_view(app->vd, ViewInfo);
     view_dispatcher_remove_view(app->vd, ViewUsb);
+    view_dispatcher_remove_view(app->vd, ViewBle);
     view_dispatcher_remove_view(app->vd, ViewWiring);
     submenu_free(app->menu);
     view_free(app->work);
     widget_free(app->info);
     view_free(app->usb_view);
+    view_free(app->ble_view);
     view_free(app->wiring_view);
     view_dispatcher_free(app->vd);
     furi_thread_free(app->worker);
