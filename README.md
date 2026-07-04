@@ -1,6 +1,6 @@
 # LGT ISP (SWD) — Flipper Zero App
 
-**Version 0.6.0** · Category: GPIO · Bilingual (English / Deutsch)
+**Version 0.6.3** · Category: GPIO · Bilingual (English / Deutsch)
 
 Flashes an **LGT8F328P** over its proprietary SWD protocol (GPIO bit-bang),
 straight from the Flipper Zero — standalone from the SD card, over **USB
@@ -221,6 +221,19 @@ getestet und liefert konsequent `FF` — das Feature ist bewusst nicht enthalten
 ---
 
 ## Changelog
+- **0.6.3** — BLE: reclaim the serial channel on every connect (re-set event callback +
+  `set_rpc_active(false)`); the Bt service re-activates RPC on connect otherwise. This is what
+  made it work — the BLE STK500 round-trip `30 20` -> `14 10` is hardware-verified, and avrdude
+  flashes + verifies over BLE (via `ble_bridge.py`).
+- **0.6.2** — BLE: `set_rpc_active(false)` on open (first attempt to claim the channel from RPC;
+  not sufficient alone — see 0.6.3).
+- **0.6.1** — BLE: fixed include path to the `ble_glue` SDK layout
+  (`profiles/serial_profile.h`) + `<string.h>`; both `ble_isp.c` and `lgt_isp.c` verified to
+  compile cleanly against the ufbt SDK (arm-none-eabi-gcc, 0 warnings).
+- **0.6.0** — **BLE (avrdude) mode**: STK500 slave over BLE-serial (`ble_isp.c`, drop-in twin of
+  `usb_isp.c`) — same SWD/STK500 core, only the transport changes. New menu item + screen with
+  live RX counter/activity bar. Manifest `requires=["bt"]`. Bit-banging stays local on the
+  Flipper; BLE carries only STK500 page commands.
 - **0.5.0** — Chip selection in the menu (328P / 168P / 88P): sets displayed flash
   size + avrdude signature, stored on SD. Only 328P is verified; 168P/88P share
   the protocol but are untested (marked "untested!"). / Chip-Auswahl im Menü.
