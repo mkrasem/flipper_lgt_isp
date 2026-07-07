@@ -107,6 +107,18 @@ static void SWD_ReadSWDID(uint8_t id[4]) {
     swd_read(id, 4);
     SWD_Idle(4);
 }
+/* GUID (4-Byte-Chip-Seriennummer) -- lock-unabhaengig lesbar, kein Unlock noetig. */
+static void SWD_ReadGUID(uint8_t g[4]) {
+    SWD_Idle(10);
+    SWD_WriteByte(1, 0xA8, 1); SWD_Idle(4);
+    swd_read(g, 4);
+    SWD_Idle(4);
+}
+static bool guid_plausible(const uint8_t g[4]) {
+    int z = 1, f = 1;
+    for(int i = 0; i < 4; i++) { if(g[i] != 0x00) z = 0; if(g[i] != 0xFF) f = 0; }
+    return !(z || f);
+}
 
 /* ---- Framing: SWDEN / Unlock / EEE (exakt wie ft2232_lgtisp) ---- */
 static void SWD_SWDEN(void) {
@@ -131,6 +143,16 @@ static void SWD_EEE_DSEQ(uint32_t data) {
     SWD_WriteByte(0, (uint8_t)(data >> 16), 0);
     SWD_WriteByte(0, (uint8_t)(data >> 24), 1);
     SWD_Idle(4);
+}
+/* CRACK: loescht nur die 1. Flash-Seite (1 KB, 0x000-0x3FF), bricht den Leseschutz,
+ * der Rest bleibt lesbar. Port aus LGTISP crack() / ftdude. Semi-destruktiv --
+ * nur fuer Lese-/Dump-Zugriff (unterscheidet sich von ChipErase durch 0x92/0x9e statt 0x9a). */
+static void SWD_Crack(void) {
+    SWD_EEE_CSEQ(0x00,1); SWD_EEE_CSEQ(0x98,1); SWD_EEE_CSEQ(0x92,1);
+    furi_delay_ms(200);
+    SWD_EEE_CSEQ(0x9e,1); furi_delay_ms(200);
+    SWD_EEE_CSEQ(0x8a,1); furi_delay_ms(20);
+    SWD_EEE_CSEQ(0x88,1); SWD_EEE_CSEQ(0x00,1);
 }
 static void SWD_ChipErase(void) {
     SWD_EEE_CSEQ(0x00,1); SWD_EEE_CSEQ(0x98,1); SWD_EEE_CSEQ(0x9a,1);
@@ -179,7 +201,7 @@ static uint8_t SWD_UnLock(uint8_t chip_erase) {
     if(!(swdid[0] == 0x3e || swdid[0] == 0x3f)) return 0;
     if(swdid[0] == 0x3f && !chip_erase)         return 1;
     if(swdid[0] == 0x3e) SWD_UnLock0();
-    SWD_ChipErase();
+    if(chip_erase) SWD_ChipErase(); else SWD_Crack();   /* Voll-Erase (Schreiben) vs. Crack (nur 1. KB, Lesen) */
     if(swdid[0] == 0x3e) {
         SWD_UnLock1();
         SWD_WriteByte(1,0xb1,0);SWD_WriteByte(0,0x3d,0);SWD_WriteByte(0,0x60,0);
@@ -226,7 +248,9 @@ static int page_is_empty(const uint8_t* img, uint32_t base) {
     return 1;
 }
 
-bool lgt_read_id(uint8_t id[4]) {
+bool lgt_read_id_guid(uint8_t id[4], uint8_t guid[4]) {
+    bool ok;
+    guid[0] = guid[1] = guid[2] = guid[3] = 0;
     lgt_gpio_init();
     /* Light-pmode: nur Reset + Init, kein Erase */
     rstn_hi(); furi_delay_ms(20);
@@ -234,9 +258,41 @@ bool lgt_read_id(uint8_t id[4]) {
     SWD_init();
     SWD_Idle(80);
     SWD_ReadSWDID(id);
+    ok = (id[0] == 0x3e || id[0] == 0x3f);
+    if(ok) { SWD_SWDEN(); SWD_ReadGUID(guid); if(!guid_plausible(guid)) guid[0]=guid[1]=guid[2]=guid[3]=0; }
     end_pmode();
     lgt_gpio_deinit();
-    return (id[0] == 0x3e || id[0] == 0x3f);
+    return ok;
+}
+bool lgt_read_id(uint8_t id[4]) {
+    uint8_t guid[4];
+    return lgt_read_id_guid(id, guid);
+}
+
+/* Flash auslesen (per Crack, opfert 1. KB). buf muss len Bytes fassen. 0=ok, -1=kein LGT. */
+int lgt_dump(uint8_t* buf, uint32_t len, LgtProgressCb cb, void* ctx) {
+    uint32_t a;
+    lgt_gpio_init();
+    if(!start_pmode(0)) { end_pmode(); lgt_gpio_deinit(); return -1; }   /* Crack: 1. KB geopfert, Rest lesbar */
+    for(a = 0; a < len; a += LGT_PAGE_BYTES) {
+        uint32_t nn = (len - a >= LGT_PAGE_BYTES) ? LGT_PAGE_BYTES : (len - a);
+        lgt_read_page(a, &buf[a], (int)nn);
+        if(cb) cb(ctx, a, len, LGT_PHASE_READ);
+    }
+    end_pmode();
+    lgt_gpio_deinit();
+    return 0;
+}
+/* Leseschutz brechen (Crack), SWDID danach zurueckgeben. true = LGT erkannt. */
+bool lgt_crack(uint8_t id[4]) {
+    bool ok;
+    id[0] = id[1] = id[2] = id[3] = 0;
+    lgt_gpio_init();
+    ok = (start_pmode(0) != 0);      /* Reset + Crack-Unlock (1. KB geopfert) */
+    if(ok) SWD_ReadSWDID(id);        /* SWDID danach -> 0x3F (in-Session entsperrt) */
+    end_pmode();
+    lgt_gpio_deinit();
+    return ok;
 }
 
 int lgt_flash(const uint8_t* img, uint32_t img_len, bool verify, LgtProgressCb cb, void* ctx) {

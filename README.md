@@ -1,6 +1,6 @@
 # LGT ISP (SWD) — Flipper Zero App
 
-**Version 0.6.3** · Category: GPIO · Bilingual (English / Deutsch)
+**Version 0.7.0** · Category: GPIO · Bilingual (English / Deutsch)
 
 Flashes an **LGT8F328P** over its proprietary SWD protocol (GPIO bit-bang),
 straight from the Flipper Zero — standalone from the SD card, over **USB
@@ -71,12 +71,13 @@ Or copy the built `lgt_isp.fap` to `SD:/apps/GPIO/`. The app shows up under
 **Apps → GPIO → LGT ISP (SWD)**.
 
 ### Usage
-Menu: Flash from SD · Flash + verify · Read chip ID · USB (avrdude) · BLE (avrdude) · Wiring ·
-About · Language.
+Menu: Flash from SD · Flash + verify · Read chip ID · Dump to SD · Crack · USB (avrdude) · BLE (avrdude) · Wiring · About · Language.
 
 - **Flash from SD** — pick a `.hex`, then unlock + erase + write.
 - **Flash + verify** — additionally reads back and compares (same session).
-- **Read chip ID** — reads the SWDID (no erase). `3E`/`3F` = LGT detected.
+- **Read chip ID** — reads the SWDID and the lock-independent GUID (no erase). `3E`/`3F` = LGT detected.
+- **Dump to SD (crack)** — reads flash to `/ext/lgt_dump.hex` (sacrifices the first 1 KB — see below).
+- **Crack (read-protect)** — breaks read protection (erases the first 1 KB); see below.
 - **USB (avrdude)** — turns the Flipper into a virtual COM port. A **second**
   COM port appears — use that one, not the CLI port:
 
@@ -101,14 +102,22 @@ About · Language.
   must be present. See the header comment in `ble_isp.c`.
 - **Language** — toggles English/German; stored on the SD card.
 
-### No dump / read-out (LGT limitation)
-Unlike AVR ISP, existing firmware **cannot be read back** from the LGT8F328P.
-The read (EEE) engine is only enabled by the full unlock sequence, which
-**erases the chip** — the enable step sits after the chip-erase in the protocol.
-Reading therefore only works to *verify* what was just written in the same
-session (which is what avrdude uses when flashing over USB). A dump was tested
-and consistently returns `FF`, so the feature is intentionally absent. (In
-effect a copy protection built into the LGT.)
+### Dump / read-out (via crack)
+Existing firmware **can** be read back — but not for free. The LGT re-locks on
+every reset, and its read (EEE) engine only comes up after an unlock that erases
+flash. The trick (from the `ftdude` work) is the **crack**: it erases *only the
+first page* (1 KB, `0x000`-`0x3FF`) instead of the whole chip, which is enough to
+enable reading. A dump therefore recovers everything from `0x400` onward; the
+first 1 KB comes back as `FF`.
+
+- **Dump to SD (crack)** — cracks the chip, reads all 32 KB, and writes
+  `/ext/lgt_dump.hex`. The first 1 KB is lost (reads `FF`); `0x400`+ is the
+  original code. Use only when you accept sacrificing the first page.
+- **Crack (read-protect)** — performs the crack alone (breaks read protection,
+  erases the first 1 KB), then shows the SWDID. Handy before dumping, or to clear
+  a protected part.
+
+Same behaviour as `ftdude -c lgt --dump out.hex -F` / `--crack`.
 
 ### Versioning
 - App version in `application.fam` as `fap_version=(MAJOR, MINOR)`.
@@ -189,12 +198,13 @@ Oder die gebaute `lgt_isp.fap` nach `SD:/apps/GPIO/` kopieren. App erscheint
 unter **Apps → GPIO → LGT ISP (SWD)**.
 
 ### Bedienung
-Menü: Flash von SD · Flash + Verify · Chip-ID lesen · USB (avrdude) ·
-Verdrahtung · About · Language.
+Menü: Flash von SD · Flash + Verify · Chip-ID lesen · Dump → SD · Crack · USB (avrdude) · Verdrahtung · About · Language.
 
 - **Flash von SD** — `.hex` wählen, dann Unlock + Erase + Write.
 - **Flash + Verify** — zusätzlich Rücklesen & Vergleich (gleiche Session).
-- **Chip-ID lesen** — SWDID auslesen (ohne Erase). `3E`/`3F` = LGT erkannt.
+- **Chip-ID lesen** — SWDID und die lock-unabhängige GUID auslesen (ohne Erase). `3E`/`3F` = LGT erkannt.
+- **Dump → SD (Crack)** — liest Flash nach `/ext/lgt_dump.hex` (opfert das erste 1 KB — siehe unten).
+- **Crack (Leseschutz)** — bricht den Leseschutz (löscht das erste 1 KB); siehe unten.
 - **USB (avrdude)** — Flipper wird virtueller COM-Port. Es erscheint ein
   **zweiter** COM-Port — den nehmen, nicht den CLI-Port:
 
@@ -204,14 +214,23 @@ Verdrahtung · About · Language.
   Flipper meldet die passende Signatur. **Zurück** beendet den USB-Modus.
 - **Language** — schaltet Deutsch/Englisch um; wird auf der SD gespeichert.
 
-### Kein Dump/Auslesen (LGT-Grenze)
-Anders als bei AVR-ISP lässt sich bestehende Firmware vom LGT8F328P **nicht
-auslesen**. Die Lese-Engine (EEE) wird erst durch die volle Unlock-Sequenz
-freigeschaltet, und die **löscht den Chip** — die Freischaltung steht im
-Protokoll hinter dem ChipErase. Lesen funktioniert daher nur zum *Verifizieren*
-des gerade Geschriebenen (das nutzt avrdude beim USB-Flashen). Ein Dump wurde
-getestet und liefert konsequent `FF` — das Feature ist bewusst nicht enthalten.
-(Faktisch ein Kopierschutz des LGT.)
+### Dump/Auslesen (per Crack)
+Bestehende Firmware lässt sich **doch** auslesen — aber nicht umsonst. Der LGT
+sperrt bei jedem Reset, und seine Lese-Engine (EEE) kommt erst nach einem Unlock
+hoch, der Flash löscht. Der Kniff (aus der `ftdude`-Arbeit) ist der **Crack**: er
+löscht *nur die erste Seite* (1 KB, `0x000`-`0x3FF`) statt des ganzen Chips, und
+das genügt zum Freischalten des Lesens. Ein Dump rettet damit alles ab `0x400`;
+das erste 1 KB kommt als `FF` zurück.
+
+- **Dump → SD (Crack)** — crackt den Chip, liest alle 32 KB und schreibt
+  `/ext/lgt_dump.hex`. Das erste 1 KB geht verloren (liest `FF`); ab `0x400`
+  steht der Originalcode. Nur nutzen, wenn das Opfern der ersten Seite in Ordnung
+  ist.
+- **Crack (Leseschutz)** — führt nur den Crack aus (bricht den Leseschutz,
+  löscht das erste 1 KB) und zeigt dann die SWDID. Praktisch vor dem Dumpen oder
+  um einen geschützten Chip zu entsperren.
+
+Gleiches Verhalten wie `ftdude -c lgt --dump out.hex -F` / `--crack`.
 
 ### Versionierung
 - App-Version in `application.fam` als `fap_version=(MAJOR, MINOR)`.
@@ -221,6 +240,11 @@ getestet und liefert konsequent `FF` — das Feature ist bewusst nicht enthalten
 ---
 
 ## Changelog
+- **0.7.0** — Dump/read-out via crack (from the `ftdude` findings): new
+  **Dump → SD** (writes `/ext/lgt_dump.hex`, sacrifices the first 1 KB, recovers
+  `0x400`+) and **Crack** (breaks read protection alone). **Read chip ID** now
+  also shows the lock-independent GUID. Reverses the 0.3.1 "dump impossible"
+  note — a partial dump *is* possible. / Dump per Crack + GUID-Anzeige.
 - **0.6.3** — BLE: reclaim the serial channel on every connect (re-set event callback +
   `set_rpc_active(false)`); the Bt service re-activates RPC on connect otherwise. This is what
   made it work — the BLE STK500 round-trip `30 20` -> `14 10` is hardware-verified, and avrdude

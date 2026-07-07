@@ -27,19 +27,21 @@
 #include "ble_isp.h"
 #include "stk500.h"
 
-#define LGT_ISP_VERSION "0.6.3"
+#define LGT_ISP_VERSION "0.7.0"
 #define TAG             "LgtIsp"
 #define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
 
 typedef enum { ViewMenu, ViewWork, ViewInfo, ViewUsb, ViewBle, ViewWiring } ViewId;
 typedef enum { EvProgress = 100, EvDone } CustomEvent;
-typedef enum { OpFlash, OpFlashVerify, OpReadId } Op;
+typedef enum { OpFlash, OpFlashVerify, OpReadId, OpDump, OpCrack } Op;
 
 typedef enum {
     ItemFlash,
     ItemFlashVerify,
     ItemReadId,
+    ItemDump,
+    ItemCrack,
     ItemUsb,
     ItemBle,
     ItemWiring,
@@ -77,6 +79,8 @@ typedef struct {
     const char *res_no_lgt, *res_unlock, *res_ok_verified, *res_ok_written;
     const char *res_diff;                   /* printf-Format mit %d */
     const char *res_bad_hex;
+    const char *menu_dump, *menu_crack, *phase_read;
+    const char *res_dump_saved, *res_dump_fail, *res_crack_ok, *res_no_save;
     const char *usb_title, *usb_hint;
     const char *menu_ble, *ble_title, *ble_hint;
     const char *wiring_title, *wiring_note;
@@ -105,6 +109,13 @@ static const Strings STR_DE = {
     .res_ok_written = "OK: geschrieben",
     .res_diff = "FEHLER: %d Byte diff",
     .res_bad_hex = "HEX-Datei ungueltig",
+    .menu_dump = "Dump -> SD (Crack)",
+    .menu_crack = "Crack (Leseschutz)",
+    .phase_read = "Lesen",
+    .res_dump_saved = "Gespeichert:\n%s",
+    .res_dump_fail = "Kein LGT / Crack",
+    .res_crack_ok = "OK, 1.KB geloescht",
+    .res_no_save = "Speichern fehlgeschl.",
     .usb_title = "ISP aktiv",
     .usb_hint = "avrdude: 2. COM-Port",
     .menu_ble = "BLE (avrdude)",
@@ -124,9 +135,12 @@ static const Strings STR_DE = {
              "(32K). Gleiche SWD-Familie:\n"
              "88P/168P (8K/16K) ungetestet.\n"
              "\n"
-             "Achtung: Unlock loescht den\n"
-             "Chip immer. Verify nur direkt\n"
-             "nach dem Flashen sinnvoll.",
+             "Achtung: Der LGT sperrt bei\n"
+             "jedem Reset. Auslesen geht nur\n"
+             "per Crack (opfert die 1. Seite,\n"
+             "1 KB); Rest ab 0x400 kommt als\n"
+             "lgt_dump.hex auf die SD.\n"
+             "Verify nur direkt nach Flash.",
 };
 
 static const Strings STR_EN = {
@@ -151,6 +165,13 @@ static const Strings STR_EN = {
     .res_ok_written = "OK: written",
     .res_diff = "ERROR: %d bytes differ",
     .res_bad_hex = "Invalid HEX file",
+    .menu_dump = "Dump -> SD (crack)",
+    .menu_crack = "Crack (read-prot.)",
+    .phase_read = "Reading",
+    .res_dump_saved = "Saved:\n%s",
+    .res_dump_fail = "No LGT / crack failed",
+    .res_crack_ok = "OK, 1st KB erased",
+    .res_no_save = "Save failed",
     .usb_title = "ISP mode active",
     .usb_hint = "avrdude: use 2nd COM port",
     .menu_ble = "BLE (avrdude)",
@@ -170,9 +191,12 @@ static const Strings STR_EN = {
              "(32K). Same SWD family:\n"
              "88P/168P (8K/16K) untested.\n"
              "\n"
-             "Note: unlocking always erases\n"
-             "the chip. Verify is only mean-\n"
-             "ingful right after flashing.",
+             "Note: the LGT re-locks on every\n"
+             "reset. Reading needs a crack\n"
+             "(sacrifices the 1st page, 1 KB);\n"
+             "the rest from 0x400 is saved as\n"
+             "lgt_dump.hex on the SD card.\n"
+             "Verify only right after flash.",
 };
 
 static const Strings* S = &STR_DE;
@@ -261,9 +285,19 @@ static void draw_chip_detected(Canvas* c, bool ok, const char* line) {
         snprintf(kb, sizeof(kb), "%s  %u Kb", ch->shortn, ch->kb);
         canvas_draw_str_aligned(c, 64, 28, AlignCenter, AlignCenter, kb);
     }
-    canvas_draw_str_aligned(c, 64, 44, AlignCenter, AlignCenter, line);
-    if(ok && ch->untested)
-        canvas_draw_str_aligned(c, 64, 53, AlignCenter, AlignCenter, S->untested);
+    {   /* line darf zwei Zeilen enthalten (SWDID \n GUID) */
+        const char* nl = strchr(line, '\n');
+        if(nl) {
+            char l1[24]; size_t n1 = (size_t)(nl - line); if(n1 >= sizeof(l1)) n1 = sizeof(l1) - 1;
+            memcpy(l1, line, n1); l1[n1] = 0;
+            canvas_draw_str_aligned(c, 64, 41, AlignCenter, AlignCenter, l1);
+            canvas_draw_str_aligned(c, 64, 50, AlignCenter, AlignCenter, nl + 1);
+        } else {
+            canvas_draw_str_aligned(c, 64, 44, AlignCenter, AlignCenter, line);
+            if(ok && ch->untested)
+                canvas_draw_str_aligned(c, 64, 53, AlignCenter, AlignCenter, S->untested);
+        }
+    }
     canvas_draw_str_aligned(c, 64, 62, AlignCenter, AlignCenter, S->back_menu);
 }
 
@@ -436,7 +470,8 @@ static bool load_hex_file(App* app, const char* path) {
 
 static void progress_cb(void* ctx, uint32_t done, uint32_t total, int phase) {
     App* app = ctx;
-    const char* p = (phase == LGT_PHASE_VERIFY) ? S->phase_verify : S->phase_write;
+    const char* p = (phase == LGT_PHASE_VERIFY) ? S->phase_verify :
+                    (phase == LGT_PHASE_READ)   ? S->phase_read : S->phase_write;
     furi_mutex_acquire(app->mtx, FuriWaitForever);
     app->w_done = done;
     app->w_total = total;
@@ -446,17 +481,71 @@ static void progress_cb(void* ctx, uint32_t done, uint32_t total, int phase) {
     view_dispatcher_send_custom_event(app->vd, EvProgress);
 }
 
+/* Dump-Puffer (app->img, len Bytes) als Intel-HEX nach /ext/lgt_dump.hex schreiben.
+ * LGT-Flash <= 64 KB -> 16-Bit-Adressen, keine Extended-Address-Records noetig. */
+static bool save_dump_hex(App* app, uint32_t len, char* out_name, size_t name_cap) {
+    const char* path = "/ext/lgt_dump.hex";
+    snprintf(out_name, name_cap, "lgt_dump.hex");
+    File* f = storage_file_alloc(app->storage);
+    bool ok = false;
+    if(storage_file_open(f, path, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        char line[80];
+        ok = true;
+        for(uint32_t a = 0; a < len && ok; a += 16) {
+            uint32_t n = (len - a >= 16) ? 16 : (len - a);
+            int m = ihex_record(line, sizeof(line), (uint16_t)a, &app->img[a], (uint8_t)n);
+            if(m <= 0 || storage_file_write(f, line, (size_t)m) != (size_t)m) ok = false;
+        }
+        if(ok) {
+            int m = ihex_eof(line, sizeof(line));
+            ok = (m > 0 && storage_file_write(f, line, (size_t)m) == (size_t)m);
+        }
+    }
+    storage_file_close(f);
+    storage_file_free(f);
+    return ok;
+}
+
 static int32_t worker_thread(void* ctx) {
     App* app = ctx;
     if(app->op == OpReadId) {
-        uint8_t id[4] = {0};
-        bool ok = lgt_read_id(id);
+        uint8_t id[4] = {0}, guid[4] = {0};
+        bool ok = lgt_read_id_guid(id, guid);
         furi_mutex_acquire(app->mtx, FuriWaitForever);
         if(ok)
-            snprintf(app->w_result, sizeof(app->w_result), "ID: %02X %02X %02X %02X", id[0], id[1], id[2], id[3]);
+            snprintf(app->w_result, sizeof(app->w_result),
+                     "SWDID %02X %02X %02X %02X\nGUID %02X %02X %02X %02X",
+                     id[0], id[1], id[2], id[3], guid[0], guid[1], guid[2], guid[3]);
         else
             snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_no_lgt);
         app->w_ok = ok;
+        app->w_finished = true;
+        furi_mutex_release(app->mtx);
+    } else if(app->op == OpCrack) {
+        uint8_t id[4] = {0};
+        bool ok = lgt_crack(id);
+        furi_mutex_acquire(app->mtx, FuriWaitForever);
+        if(ok)
+            snprintf(app->w_result, sizeof(app->w_result), "%s\nSWDID %02X %02X %02X %02X",
+                     S->res_crack_ok, id[0], id[1], id[2], id[3]);
+        else
+            snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_dump_fail);
+        app->w_ok = ok;
+        app->w_finished = true;
+        furi_mutex_release(app->mtx);
+    } else if(app->op == OpDump) {
+        int r = lgt_dump(app->img, LGT_FLASH_BYTES, progress_cb, app);
+        bool saved = false;
+        char fname[24] = {0};
+        if(r == 0) saved = save_dump_hex(app, LGT_FLASH_BYTES, fname, sizeof(fname));
+        furi_mutex_acquire(app->mtx, FuriWaitForever);
+        if(r != 0)
+            snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_dump_fail);
+        else if(saved)
+            snprintf(app->w_result, sizeof(app->w_result), S->res_dump_saved, fname);
+        else
+            snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_no_save);
+        app->w_ok = (r == 0 && saved);
         app->w_finished = true;
         furi_mutex_release(app->mtx);
     } else {
@@ -485,7 +574,7 @@ static void start_work(App* app) {
             m->done = 0;
             m->total = 1;
             m->finished = false;
-            m->is_id = (app->op == OpReadId);
+            m->is_id = (app->op == OpReadId || app->op == OpCrack);
             m->ok = false;
             strncpy(m->phase, S->phase_start, sizeof(m->phase) - 1);
             m->result[0] = 0;
@@ -571,6 +660,8 @@ static void menu_build(App* app) {
     submenu_add_item(app->menu, S->menu_flash, ItemFlash, menu_cb, app);
     submenu_add_item(app->menu, S->menu_flash_verify, ItemFlashVerify, menu_cb, app);
     submenu_add_item(app->menu, S->menu_id, ItemReadId, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_dump, ItemDump, menu_cb, app);
+    submenu_add_item(app->menu, S->menu_crack, ItemCrack, menu_cb, app);
     submenu_add_item(app->menu, S->menu_usb, ItemUsb, menu_cb, app);
     submenu_add_item(app->menu, S->menu_ble, ItemBle, menu_cb, app);
     submenu_add_item(app->menu, S->menu_wiring, ItemWiring, menu_cb, app);
@@ -633,6 +724,14 @@ static void menu_cb(void* ctx, uint32_t index) {
     }
     case ItemReadId:
         app->op = OpReadId;
+        start_work(app);
+        break;
+    case ItemDump:
+        app->op = OpDump;
+        start_work(app);
+        break;
+    case ItemCrack:
+        app->op = OpCrack;
         start_work(app);
         break;
     case ItemUsb:
