@@ -1,5 +1,5 @@
 App(
-    appid="lgt_isp",
+    appid="flipper_lgt_isp",
     name="LGT ISP (SWD)",
     apptype=FlipperAppType.EXTERNAL,
     entry_point="lgt_isp_app",
