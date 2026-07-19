@@ -12,10 +12,10 @@
 #include "lgt_swd.h"
 
 /* Antworten */
-#define STK_OK      0x10
-#define STK_INSYNC  0x14
-#define STK_NOSYNC  0x15
-#define CRC_EOP     0x20
+#define STK_OK             0x10
+#define STK_INSYNC         0x14
+#define STK_NOSYNC         0x15
+#define CRC_EOP            0x20
 /* Kommandos */
 #define STK_GET_SYNC       0x30
 #define STK_GET_SIGN_ON    0x31
@@ -32,7 +32,7 @@
 #define STK_READ_PAGE      0x74
 #define STK_READ_SIGN      0x75
 
-static uint8_t SIGNATURE[3] = {0x1E, 0x95, 0x0F};   /* Standard: 328P; via Setter aenderbar */
+static uint8_t SIGNATURE[3] = {0x1E, 0x95, 0x0F}; /* Standard: 328P; via Setter aenderbar */
 
 void stk500_set_signature(uint8_t s0, uint8_t s1, uint8_t s2) {
     SIGNATURE[0] = s0;
@@ -46,14 +46,23 @@ static bool gb(Stk500Io* io, uint8_t* b) {
     }
     return false;
 }
-static uint8_t g1(Stk500Io* io) { uint8_t b = 0; gb(io, &b); return b; }
-static void p1(Stk500Io* io, uint8_t b) { io->send(io->ctx, &b, 1); }
+static uint8_t g1(Stk500Io* io) {
+    uint8_t b = 0;
+    gb(io, &b);
+    return b;
+}
+static void p1(Stk500Io* io, uint8_t b) {
+    io->send(io->ctx, &b, 1);
+}
 
 /* EOP erwarten. true = synchron (dann Antwort senden), false -> NOSYNC bereits gesendet. */
 static bool eop(Stk500Io* io) {
     uint8_t b;
     if(!gb(io, &b)) return false;
-    if(b != CRC_EOP) { p1(io, STK_NOSYNC); return false; }
+    if(b != CRC_EOP) {
+        p1(io, STK_NOSYNC);
+        return false;
+    }
     return true;
 }
 
@@ -68,7 +77,10 @@ void stk500_run(Stk500Io* io) {
 
         switch(cmd) {
         case STK_GET_SYNC:
-            if(eop(io)) { p1(io, STK_INSYNC); p1(io, STK_OK); }
+            if(eop(io)) {
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
+            }
             break;
 
         case STK_GET_SIGN_ON:
@@ -83,74 +95,110 @@ void stk500_run(Stk500Io* io) {
             uint8_t prm = g1(io);
             if(eop(io)) {
                 uint8_t v = 0x00;
-                if(prm == 0x80) v = 0x02;        /* HW-Version */
-                else if(prm == 0x81) v = 0x01;   /* SW-Major */
-                else if(prm == 0x82) v = 0x12;   /* SW-Minor */
-                else if(prm == 0x84 || prm == 0x98) v = 0x03;
-                p1(io, STK_INSYNC); p1(io, v); p1(io, STK_OK);
+                if(prm == 0x80)
+                    v = 0x02; /* HW-Version */
+                else if(prm == 0x81)
+                    v = 0x01; /* SW-Major */
+                else if(prm == 0x82)
+                    v = 0x12; /* SW-Minor */
+                else if(prm == 0x84 || prm == 0x98)
+                    v = 0x03;
+                p1(io, STK_INSYNC);
+                p1(io, v);
+                p1(io, STK_OK);
             }
             break;
         }
 
         case STK_SET_PARAMETER:
-            g1(io); g1(io);
-            if(eop(io)) { p1(io, STK_INSYNC); p1(io, STK_OK); }
+            g1(io);
+            g1(io);
+            if(eop(io)) {
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
+            }
             break;
 
         case STK_SET_DEVICE:
-            for(int i = 0; i < 20; i++) g1(io);
-            if(eop(io)) { p1(io, STK_INSYNC); p1(io, STK_OK); }
+            for(int i = 0; i < 20; i++)
+                g1(io);
+            if(eop(io)) {
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
+            }
             break;
 
         case STK_SET_DEVICE_EXT:
-            for(int i = 0; i < 5; i++) g1(io);
-            if(eop(io)) { p1(io, STK_INSYNC); p1(io, STK_OK); }
+            for(int i = 0; i < 5; i++)
+                g1(io);
+            if(eop(io)) {
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
+            }
             break;
 
         case STK_ENTER_PROGMODE:
             if(eop(io)) {
-                if(!pmode) pmode = lgt_pmode_enter();     /* Unlock + Erase (einmal) */
-                p1(io, STK_INSYNC); p1(io, STK_OK);
+                if(!pmode) pmode = lgt_pmode_enter(); /* Unlock + Erase (einmal) */
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
                 if(io->activity) io->activity(io->ctx);
             }
             break;
 
         case STK_LEAVE_PROGMODE:
             if(eop(io)) {
-                if(pmode) { lgt_pmode_leave(); pmode = false; }
-                p1(io, STK_INSYNC); p1(io, STK_OK);
+                if(pmode) {
+                    lgt_pmode_leave();
+                    pmode = false;
+                }
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
             }
             break;
 
-        case STK_CHIP_ERASE:                              /* Unlock hat bereits geloescht */
-            if(eop(io)) { p1(io, STK_INSYNC); p1(io, STK_OK); }
+        case STK_CHIP_ERASE: /* Unlock hat bereits geloescht */
+            if(eop(io)) {
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
+            }
             break;
 
         case STK_LOAD_ADDRESS: {
-            uint8_t lo = g1(io), hi = g1(io);             /* Wortadresse, little-endian */
-            byte_addr = (((uint32_t)hi << 8) | lo) * 2u;  /* -> Byteadresse */
-            if(eop(io)) { p1(io, STK_INSYNC); p1(io, STK_OK); }
+            uint8_t lo = g1(io), hi = g1(io); /* Wortadresse, little-endian */
+            byte_addr = (((uint32_t)hi << 8) | lo) * 2u; /* -> Byteadresse */
+            if(eop(io)) {
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
+            }
             break;
         }
 
         case STK_UNIVERSAL: {
             uint8_t a = g1(io), b = g1(io), c = g1(io), d = g1(io);
             uint8_t r = 0x00;
-            (void)b; (void)d;
-            if(a == 0x30 && c < 3) r = SIGNATURE[c];       /* Read-Signature-Byte */
-            if(eop(io)) { p1(io, STK_INSYNC); p1(io, r); p1(io, STK_OK); }
+            (void)b;
+            (void)d;
+            if(a == 0x30 && c < 3) r = SIGNATURE[c]; /* Read-Signature-Byte */
+            if(eop(io)) {
+                p1(io, STK_INSYNC);
+                p1(io, r);
+                p1(io, STK_OK);
+            }
             break;
         }
 
         case STK_PROG_PAGE: {
             uint16_t len = (uint16_t)g1(io) << 8;
             len |= g1(io);
-            uint8_t mem = g1(io);                          /* 'F' Flash / 'E' EEPROM */
+            uint8_t mem = g1(io); /* 'F' Flash / 'E' EEPROM */
             if(len > sizeof(buf)) len = sizeof(buf);
-            for(uint16_t i = 0; i < len; i++) buf[i] = g1(io);
+            for(uint16_t i = 0; i < len; i++)
+                buf[i] = g1(io);
             if(eop(io)) {
                 if(mem == 'F' && pmode) lgt_page_write(byte_addr, buf, len);
-                p1(io, STK_INSYNC); p1(io, STK_OK);
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
                 if(io->activity) io->activity(io->ctx);
             }
             break;
@@ -167,7 +215,8 @@ void stk500_run(Stk500Io* io) {
                     lgt_page_read(byte_addr, buf, len);
                     io->send(io->ctx, buf, len);
                 } else {
-                    for(uint16_t i = 0; i < len; i++) p1(io, 0xFF);
+                    for(uint16_t i = 0; i < len; i++)
+                        p1(io, 0xFF);
                 }
                 p1(io, STK_OK);
                 if(io->activity) io->activity(io->ctx);
@@ -183,8 +232,11 @@ void stk500_run(Stk500Io* io) {
             }
             break;
 
-        default:                                           /* unbekannt: nachsichtig quittieren */
-            if(eop(io)) { p1(io, STK_INSYNC); p1(io, STK_OK); }
+        default: /* unbekannt: nachsichtig quittieren */
+            if(eop(io)) {
+                p1(io, STK_INSYNC);
+                p1(io, STK_OK);
+            }
             break;
         }
     }

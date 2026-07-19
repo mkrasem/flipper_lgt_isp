@@ -11,7 +11,7 @@ sourcecode:
     origin: https://github.com/mkrasem/flipper_lgt_isp.git
     # Voller Commit-SHA des zu veroeffentlichenden Standes.
     # >>> ANPASSEN: nach dem Push mit  git rev-parse HEAD  ermitteln.
-    commit_sha: REPLACE_WITH_FULL_40_CHAR_COMMIT_SHA
+    commit_sha: e9f5b8daa90436c55a4f088bcc0e9c36354173f3
     # Falls die App NICHT im Repo-Wurzelverzeichnis liegt, hier das Unterverzeichnis:
     # subdir: .
 
@@ -45,3 +45,5 @@ screenshots:
   - screenshots/flp0.png
   - screenshots/flp1.png
   - screenshots/flp2.png
+  - screenshots/flp3.png
+  - screenshots/flp4.png

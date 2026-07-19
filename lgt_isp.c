@@ -29,12 +29,28 @@
 
 #define LGT_ISP_VERSION "0.7.0"
 #define TAG             "LgtIsp"
-#define HEX_MAX         (128 * 1024)   /* max. HEX-Dateigroesse */
+#define HEX_MAX         (128 * 1024) /* max. HEX-Dateigroesse */
 #define HEX_DIR         "/ext"
 
-typedef enum { ViewMenu, ViewWork, ViewInfo, ViewUsb, ViewBle, ViewWiring } ViewId;
-typedef enum { EvProgress = 100, EvDone } CustomEvent;
-typedef enum { OpFlash, OpFlashVerify, OpReadId, OpDump, OpCrack } Op;
+typedef enum {
+    ViewMenu,
+    ViewWork,
+    ViewInfo,
+    ViewUsb,
+    ViewBle,
+    ViewWiring
+} ViewId;
+typedef enum {
+    EvProgress = 100,
+    EvDone
+} CustomEvent;
+typedef enum {
+    OpFlash,
+    OpFlashVerify,
+    OpReadId,
+    OpDump,
+    OpCrack
+} Op;
 
 typedef enum {
     ItemFlash,
@@ -52,18 +68,18 @@ typedef enum {
 
 /* ---------- Chip-Auswahl (LGT8FX8P-Familie) ---------- */
 typedef struct {
-    const char* name;    /* "LGT8F328P" */
-    const char* shortn;  /* "328P" */
-    const char* part;    /* avrdude -p, z.B. "m328p" */
-    uint16_t kb;         /* Flash in KB */
-    uint8_t sig[3];      /* an avrdude gemeldete Signatur */
+    const char* name; /* "LGT8F328P" */
+    const char* shortn; /* "328P" */
+    const char* part; /* avrdude -p, z.B. "m328p" */
+    uint16_t kb; /* Flash in KB */
+    uint8_t sig[3]; /* an avrdude gemeldete Signatur */
     bool untested;
 } Chip;
 
 static const Chip CHIPS[] = {
     {"LGT8F328P", "328P", "m328p", 32, {0x1E, 0x95, 0x0F}, false},
     {"LGT8F168P", "168P", "m168p", 16, {0x1E, 0x94, 0x0B}, true},
-    {"LGT8F88P",  "88P",  "m88p",  8,  {0x1E, 0x93, 0x0A}, true},
+    {"LGT8F88P", "88P", "m88p", 8, {0x1E, 0x93, 0x0A}, true},
 };
 #define N_CHIPS ((int)(sizeof(CHIPS) / sizeof(CHIPS[0])))
 static int g_chip = 0;
@@ -72,19 +88,19 @@ static int g_chip = 0;
 typedef struct {
     const char *menu_flash, *menu_flash_verify, *menu_id, *menu_usb;
     const char *menu_wiring, *menu_about, *menu_lang, *menu_chip;
-    const char *untested;
+    const char* untested;
     const char *phase_start, *phase_write, *phase_verify;
-    const char *back_menu;
+    const char* back_menu;
     const char *detected, *not_detected;
     const char *res_no_lgt, *res_unlock, *res_ok_verified, *res_ok_written;
-    const char *res_diff;                   /* printf-Format mit %d */
-    const char *res_bad_hex;
+    const char* res_diff; /* printf-Format mit %d */
+    const char* res_bad_hex;
     const char *menu_dump, *menu_crack, *phase_read;
     const char *res_dump_saved, *res_dump_fail, *res_crack_ok, *res_no_save;
     const char *usb_title, *usb_hint;
     const char *menu_ble, *ble_title, *ble_hint;
     const char *wiring_title, *wiring_note;
-    const char *about;
+    const char* about;
 } Strings;
 
 static const Strings STR_DE = {
@@ -94,7 +110,7 @@ static const Strings STR_DE = {
     .menu_usb = "USB (avrdude)",
     .menu_wiring = "Verdrahtung",
     .menu_about = "About",
-    .menu_lang = "Language: English",       /* zeigt die ZIEL-Sprache */
+    .menu_lang = "Language: English", /* zeigt die ZIEL-Sprache */
     .menu_chip = "Chip:",
     .untested = "ungetestet!",
     .phase_start = "Start",
@@ -150,7 +166,7 @@ static const Strings STR_EN = {
     .menu_usb = "USB (avrdude)",
     .menu_wiring = "Wiring",
     .menu_about = "About",
-    .menu_lang = "Sprache: Deutsch",        /* zeigt die ZIEL-Sprache */
+    .menu_lang = "Sprache: Deutsch", /* zeigt die ZIEL-Sprache */
     .menu_chip = "Chip:",
     .untested = "untested!",
     .phase_start = "Start",
@@ -209,24 +225,24 @@ typedef struct {
     Gui* gui;
     ViewDispatcher* vd;
     Submenu* menu;
-    View* work;                 /* eigener Live-Progress-/Ergebnis-View */
-    Widget* info;               /* scrollbarer Text (About) */
-    View* usb_view;             /* USB-Modus-Screen (eigener enter/exit-Lifecycle) */
-    View* ble_view;             /* BLE-Modus-Screen (eigener enter/exit-Lifecycle) */
-    View* wiring_view;          /* gezeichneter Verdrahtungsplan */
-    UsbIsp* usb;                /* != NULL wenn USB-Modus aktiv */
-    BleIsp* ble;                /* != NULL wenn BLE-Modus aktiv */
-    FuriTimer* ble_timer;       /* periodisches Redraw der RX-Anzeige */
+    View* work; /* eigener Live-Progress-/Ergebnis-View */
+    Widget* info; /* scrollbarer Text (About) */
+    View* usb_view; /* USB-Modus-Screen (eigener enter/exit-Lifecycle) */
+    View* ble_view; /* BLE-Modus-Screen (eigener enter/exit-Lifecycle) */
+    View* wiring_view; /* gezeichneter Verdrahtungsplan */
+    UsbIsp* usb; /* != NULL wenn USB-Modus aktiv */
+    BleIsp* ble; /* != NULL wenn BLE-Modus aktiv */
+    FuriTimer* ble_timer; /* periodisches Redraw der RX-Anzeige */
     DialogsApp* dialogs;
     Storage* storage;
     NotificationApp* notif;
     FuriThread* worker;
     FuriMutex* mtx;
 
-    uint8_t* img;               /* 32K Flash-Abbild (Heap) */
+    uint8_t* img; /* 32K Flash-Abbild (Heap) */
     uint32_t img_len;
     Op op;
-    char chip_label[24];        /* "Chip: 328P" fuer das Menue */
+    char chip_label[24]; /* "Chip: 328P" fuer das Menue */
 
     /* Fortschritt (Worker -> GUI, via mtx) */
     uint32_t w_done, w_total;
@@ -242,7 +258,7 @@ typedef struct {
     char phase[16];
     char result[64];
     bool finished;
-    bool is_id;   /* Ergebnis eines Chip-ID-Laufs -> Chip-Grafik */
+    bool is_id; /* Ergebnis eines Chip-ID-Laufs -> Chip-Grafik */
     bool ok;
 } WorkModel;
 
@@ -270,14 +286,15 @@ static void draw_ic(Canvas* c, int x, int y, int w, int h) {
         canvas_draw_line(c, px, y - 2, px, y - 1);
         canvas_draw_line(c, px, y + h + 1, px, y + h + 2);
     }
-    canvas_draw_disc(c, x + 5, y + h / 2, 1);   /* Orientierungspunkt */
+    canvas_draw_disc(c, x + 5, y + h / 2, 1); /* Orientierungspunkt */
 }
 
 /* "Chip erkannt"-Screen (Chip-ID-Ergebnis) */
 static void draw_chip_detected(Canvas* c, bool ok, const char* line) {
     const Chip* ch = &CHIPS[g_chip];
     canvas_set_font(c, FontPrimary);
-    canvas_draw_str_aligned(c, 64, 8, AlignCenter, AlignCenter, ok ? S->detected : S->not_detected);
+    canvas_draw_str_aligned(
+        c, 64, 8, AlignCenter, AlignCenter, ok ? S->detected : S->not_detected);
     draw_ic(c, 30, 18, 68, 20);
     canvas_set_font(c, FontSecondary);
     if(ok) {
@@ -285,11 +302,14 @@ static void draw_chip_detected(Canvas* c, bool ok, const char* line) {
         snprintf(kb, sizeof(kb), "%s  %u Kb", ch->shortn, ch->kb);
         canvas_draw_str_aligned(c, 64, 28, AlignCenter, AlignCenter, kb);
     }
-    {   /* line darf zwei Zeilen enthalten (SWDID \n GUID) */
+    { /* line darf zwei Zeilen enthalten (SWDID \n GUID) */
         const char* nl = strchr(line, '\n');
         if(nl) {
-            char l1[24]; size_t n1 = (size_t)(nl - line); if(n1 >= sizeof(l1)) n1 = sizeof(l1) - 1;
-            memcpy(l1, line, n1); l1[n1] = 0;
+            char l1[24];
+            size_t n1 = (size_t)(nl - line);
+            if(n1 >= sizeof(l1)) n1 = sizeof(l1) - 1;
+            memcpy(l1, line, n1);
+            l1[n1] = 0;
             canvas_draw_str_aligned(c, 64, 41, AlignCenter, AlignCenter, l1);
             canvas_draw_str_aligned(c, 64, 50, AlignCenter, AlignCenter, nl + 1);
         } else {
@@ -304,7 +324,7 @@ static void draw_chip_detected(Canvas* c, bool ok, const char* line) {
 static void work_draw(Canvas* canvas, void* model) {
     WorkModel* m = model;
     canvas_clear(canvas);
-    if(m->finished && m->is_id) {          /* Chip-ID -> hübsche Chip-Grafik */
+    if(m->finished && m->is_id) { /* Chip-ID -> hübsche Chip-Grafik */
         draw_chip_detected(canvas, m->ok, m->result);
         return;
     }
@@ -347,7 +367,8 @@ static void usb_draw(Canvas* c, void* model) {
     canvas_draw_str_aligned(c, 76, 8, AlignCenter, AlignCenter, S->usb_title);
     /* Stecker + Ribbon-Kabel links */
     canvas_draw_rframe(c, 4, 24, 14, 20, 2);
-    for(int i = 0; i < 7; i++) canvas_draw_line(c, 18, 27 + i * 2, 25, 27 + i * 2);
+    for(int i = 0; i < 7; i++)
+        canvas_draw_line(c, 18, 27 + i * 2, 25, 27 + i * 2);
     /* SWD-Box Mitte */
     canvas_draw_rframe(c, 40, 24, 42, 20, 5);
     canvas_draw_str_aligned(c, 61, 35, AlignCenter, AlignCenter, "SWD");
@@ -369,7 +390,7 @@ static void usb_draw(Canvas* c, void* model) {
 static void usb_enter(void* ctx) {
     App* app = ctx;
     const Chip* ch = &CHIPS[g_chip];
-    stk500_set_signature(ch->sig[0], ch->sig[1], ch->sig[2]);   /* gewaehlter Chip -> Signatur */
+    stk500_set_signature(ch->sig[0], ch->sig[1], ch->sig[2]); /* gewaehlter Chip -> Signatur */
     if(!app->usb) app->usb = usb_isp_start();
 }
 static void usb_exit(void* ctx) {
@@ -382,7 +403,7 @@ static void usb_exit(void* ctx) {
 
 /* ---------- BLE-Modus-View (avrdude ueber BLE-Serial) ---------- */
 typedef struct {
-    uint32_t rx;        /* ueber BLE empfangene Bytes */
+    uint32_t rx; /* ueber BLE empfangene Bytes */
     bool connected;
 } BleModel;
 
@@ -419,10 +440,13 @@ static void ble_tick(void* ctx) {
     uint32_t rx = app->ble ? ble_isp_rx_bytes(app->ble) : 0;
     bool conn = app->ble ? ble_isp_connected(app->ble) : false;
     with_view_model(
-        app->ble_view, BleModel * m, {
+        app->ble_view,
+        BleModel * m,
+        {
             m->rx = rx;
             m->connected = conn;
-        }, true);
+        },
+        true);
 }
 
 static void ble_enter(void* ctx) {
@@ -430,8 +454,7 @@ static void ble_enter(void* ctx) {
     const Chip* ch = &CHIPS[g_chip];
     stk500_set_signature(ch->sig[0], ch->sig[1], ch->sig[2]);
     if(!app->ble) app->ble = ble_isp_start();
-    if(!app->ble_timer)
-        app->ble_timer = furi_timer_alloc(ble_tick, FuriTimerTypePeriodic, app);
+    if(!app->ble_timer) app->ble_timer = furi_timer_alloc(ble_tick, FuriTimerTypePeriodic, app);
     furi_timer_start(app->ble_timer, furi_ms_to_ticks(250));
 }
 
@@ -471,7 +494,8 @@ static bool load_hex_file(App* app, const char* path) {
 static void progress_cb(void* ctx, uint32_t done, uint32_t total, int phase) {
     App* app = ctx;
     const char* p = (phase == LGT_PHASE_VERIFY) ? S->phase_verify :
-                    (phase == LGT_PHASE_READ)   ? S->phase_read : S->phase_write;
+                    (phase == LGT_PHASE_READ)   ? S->phase_read :
+                                                  S->phase_write;
     furi_mutex_acquire(app->mtx, FuriWaitForever);
     app->w_done = done;
     app->w_total = total;
@@ -513,9 +537,18 @@ static int32_t worker_thread(void* ctx) {
         bool ok = lgt_read_id_guid(id, guid);
         furi_mutex_acquire(app->mtx, FuriWaitForever);
         if(ok)
-            snprintf(app->w_result, sizeof(app->w_result),
-                     "SWDID %02X %02X %02X %02X\nGUID %02X %02X %02X %02X",
-                     id[0], id[1], id[2], id[3], guid[0], guid[1], guid[2], guid[3]);
+            snprintf(
+                app->w_result,
+                sizeof(app->w_result),
+                "SWDID %02X %02X %02X %02X\nGUID %02X %02X %02X %02X",
+                id[0],
+                id[1],
+                id[2],
+                id[3],
+                guid[0],
+                guid[1],
+                guid[2],
+                guid[3]);
         else
             snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_no_lgt);
         app->w_ok = ok;
@@ -526,8 +559,15 @@ static int32_t worker_thread(void* ctx) {
         bool ok = lgt_crack(id);
         furi_mutex_acquire(app->mtx, FuriWaitForever);
         if(ok)
-            snprintf(app->w_result, sizeof(app->w_result), "%s\nSWDID %02X %02X %02X %02X",
-                     S->res_crack_ok, id[0], id[1], id[2], id[3]);
+            snprintf(
+                app->w_result,
+                sizeof(app->w_result),
+                "%s\nSWDID %02X %02X %02X %02X",
+                S->res_crack_ok,
+                id[0],
+                id[1],
+                id[2],
+                id[3]);
         else
             snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_dump_fail);
         app->w_ok = ok;
@@ -555,7 +595,11 @@ static int32_t worker_thread(void* ctx) {
         if(r < 0)
             snprintf(app->w_result, sizeof(app->w_result), "%s", S->res_unlock);
         else if(r == 0)
-            snprintf(app->w_result, sizeof(app->w_result), "%s", verify ? S->res_ok_verified : S->res_ok_written);
+            snprintf(
+                app->w_result,
+                sizeof(app->w_result),
+                "%s",
+                verify ? S->res_ok_verified : S->res_ok_written);
         else
             snprintf(app->w_result, sizeof(app->w_result), S->res_diff, r);
         app->w_ok = (r == 0);
@@ -569,7 +613,8 @@ static int32_t worker_thread(void* ctx) {
 static void start_work(App* app) {
     /* Work-View zuruecksetzen */
     with_view_model(
-        app->work, WorkModel * m,
+        app->work,
+        WorkModel * m,
         {
             m->done = 0;
             m->total = 1;
@@ -596,7 +641,8 @@ static bool custom_cb(void* ctx, uint32_t event) {
     App* app = ctx;
     if(event == EvProgress || event == EvDone) {
         with_view_model(
-            app->work, WorkModel * m,
+            app->work,
+            WorkModel * m,
             {
                 furi_mutex_acquire(app->mtx, FuriWaitForever);
                 m->done = app->w_done;
@@ -611,7 +657,7 @@ static bool custom_cb(void* ctx, uint32_t event) {
             },
             true);
         if(event == EvDone) {
-            furi_thread_join(app->worker);      /* Worker ist zurueckgekehrt */
+            furi_thread_join(app->worker); /* Worker ist zurueckgekehrt */
             if(app->notif)
                 notification_message(app->notif, app->w_ok ? &sequence_success : &sequence_error);
         }
@@ -631,13 +677,14 @@ static void draw_wiring(Canvas* c, void* model) {
     canvas_set_font(c, FontSecondary);
     for(int i = 0; i < 5; i++) {
         int x = 2 + i * 25;
-        canvas_draw_rframe(c, x, 15, 23, 13, 2);                        /* Signal-Box */
+        canvas_draw_rframe(c, x, 15, 23, 13, 2); /* Signal-Box */
         canvas_draw_str_aligned(c, x + 11, 22, AlignCenter, AlignCenter, sig[i]);
         canvas_draw_str_aligned(c, x + 11, 34, AlignCenter, AlignCenter, pin[i]);
-        canvas_draw_line(c, x + 11, 38, x + 11, 45);                    /* Leitung zum Header */
+        canvas_draw_line(c, x + 11, 38, x + 11, 45); /* Leitung zum Header */
     }
-    canvas_draw_frame(c, 2, 45, 123, 9);                                /* Header-Leiste */
-    for(int i = 0; i < 5; i++) canvas_draw_box(c, 11 + i * 25, 47, 5, 5);
+    canvas_draw_frame(c, 2, 45, 123, 9); /* Header-Leiste */
+    for(int i = 0; i < 5; i++)
+        canvas_draw_box(c, 11 + i * 25, 47, 5, 5);
     canvas_draw_str(c, 2, 63, S->wiring_note);
 }
 
@@ -648,14 +695,15 @@ static void show_info(App* app, const char* text) {
 }
 
 /* ---------- Sprache + Menueaufbau ---------- */
-static void menu_cb(void* ctx, uint32_t index);   /* fwd */
+static void menu_cb(void* ctx, uint32_t index); /* fwd */
 
 static void lang_apply(void) {
     S = g_lang_en ? &STR_EN : &STR_DE;
 }
 
 static void menu_build(App* app) {
-    snprintf(app->chip_label, sizeof(app->chip_label), "%s %s", S->menu_chip, CHIPS[g_chip].shortn);
+    snprintf(
+        app->chip_label, sizeof(app->chip_label), "%s %s", S->menu_chip, CHIPS[g_chip].shortn);
     submenu_reset(app->menu);
     submenu_add_item(app->menu, S->menu_flash, ItemFlash, menu_cb, app);
     submenu_add_item(app->menu, S->menu_flash_verify, ItemFlashVerify, menu_cb, app);
@@ -687,7 +735,8 @@ static void lang_save(App* app) {
     storage_common_mkdir(app->storage, LANG_DIR);
     File* f = storage_file_alloc(app->storage);
     if(storage_file_open(f, LANG_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
-        char b[3] = {(char)(g_lang_en ? 'e' : 'd'), (char)(g_lang_en ? 'n' : 'e'), (char)('0' + g_chip)};
+        char b[3] = {
+            (char)(g_lang_en ? 'e' : 'd'), (char)(g_lang_en ? 'n' : 'e'), (char)('0' + g_chip)};
         storage_file_write(f, b, 3);
     }
     storage_file_close(f);
@@ -735,10 +784,10 @@ static void menu_cb(void* ctx, uint32_t index) {
         start_work(app);
         break;
     case ItemUsb:
-        view_dispatcher_switch_to_view(app->vd, ViewUsb);   /* enter-Callback startet USB */
+        view_dispatcher_switch_to_view(app->vd, ViewUsb); /* enter-Callback startet USB */
         break;
     case ItemBle:
-        view_dispatcher_switch_to_view(app->vd, ViewBle);   /* enter-Callback startet BLE */
+        view_dispatcher_switch_to_view(app->vd, ViewBle); /* enter-Callback startet BLE */
         break;
     case ItemWiring:
         view_dispatcher_switch_to_view(app->vd, ViewWiring);
@@ -749,13 +798,13 @@ static void menu_cb(void* ctx, uint32_t index) {
     case ItemChip:
         g_chip = (g_chip + 1) % N_CHIPS;
         lang_save(app);
-        menu_build(app);       /* Label aktualisieren */
+        menu_build(app); /* Label aktualisieren */
         break;
     case ItemLang:
         g_lang_en = !g_lang_en;
         lang_apply();
         lang_save(app);
-        menu_build(app);       /* Menue in neuer Sprache neu aufbauen */
+        menu_build(app); /* Menue in neuer Sprache neu aufbauen */
         break;
     default:
         break;

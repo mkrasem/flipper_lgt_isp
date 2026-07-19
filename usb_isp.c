@@ -19,8 +19,8 @@
 #include <furi_hal_usb_cdc.h>
 #include <cli/cli_vcp.h>
 
-#define CDC_CH      1        /* Kanal 1: Programmer (Kanal 0 = Flipper-CLI) */
-#define CDC_PKT     64       /* USB-FS Bulk-Paketgroesse */
+#define CDC_CH  1 /* Kanal 1: Programmer (Kanal 0 = Flipper-CLI) */
+#define CDC_PKT 64 /* USB-FS Bulk-Paketgroesse */
 
 #define EvtStop       (1UL << 0)
 #define EvtRx         (1UL << 1)
@@ -90,7 +90,7 @@ static void io_send(void* ctx, const uint8_t* buf, size_t n) {
         size_t chunk = n > CDC_PKT ? CDC_PKT : n;
         furi_thread_flags_clear(EvtTxComplete);
         furi_hal_cdc_send(CDC_CH, (uint8_t*)buf + off, (uint16_t)chunk);
-        furi_thread_flags_wait(EvtTxComplete, FuriFlagWaitAny, 200);   /* Flusskontrolle */
+        furi_thread_flags_wait(EvtTxComplete, FuriFlagWaitAny, 200); /* Flusskontrolle */
         off += chunk;
         n -= chunk;
     }

@@ -38,8 +38,8 @@
 #include <bt/bt_service/bt.h>
 #include <profiles/serial_profile.h>
 
-#define BLE_TX_MAX  200      /* Bytes pro Notification (Serial-Service kann ~244) */
-#define RX_BUF      1024
+#define BLE_TX_MAX 200 /* Bytes pro Notification (Serial-Service kann ~244) */
+#define RX_BUF     1024
 
 #define EvtStop       (1UL << 0)
 #define EvtRx         (1UL << 1)
@@ -79,8 +79,8 @@ static void ble_status_cb(BtStatus status, void* ctx) {
     if(status == BtStatusConnected && u->profile) {
         /* Der Bt-Service reaktiviert beim Connect evtl. RPC (und/oder setzt einen
          * eigenen Serial-Callback). Darum den Kanal HIER erneut uebernehmen: */
-        ble_profile_serial_set_event_callback(u->profile, RX_BUF, ble_event_cb, u);  /* <<BLE>> */
-        ble_profile_serial_set_rpc_active(u->profile, false);                        /* <<BLE>> */
+        ble_profile_serial_set_event_callback(u->profile, RX_BUF, ble_event_cb, u); /* <<BLE>> */
+        ble_profile_serial_set_rpc_active(u->profile, false); /* <<BLE>> */
     }
 }
 
@@ -103,13 +103,14 @@ static void io_send(void* ctx, const uint8_t* buf, size_t n) {
     while(n && u->run) {
         size_t chunk = n > BLE_TX_MAX ? BLE_TX_MAX : n;
         furi_thread_flags_clear(EvtTxComplete);
-        bool ok = ble_profile_serial_tx(u->profile, (uint8_t*)buf + off, (uint16_t)chunk);  /* <<BLE>> */
+        bool ok =
+            ble_profile_serial_tx(u->profile, (uint8_t*)buf + off, (uint16_t)chunk); /* <<BLE>> */
         if(ok) {
-            furi_thread_flags_wait(EvtTxComplete, FuriFlagWaitAny, 500);  /* auf DataSent warten */
+            furi_thread_flags_wait(EvtTxComplete, FuriFlagWaitAny, 500); /* auf DataSent warten */
             off += chunk;
             n -= chunk;
         } else {
-            furi_delay_ms(20);   /* nicht verbunden / Puffer voll -> kurz zurueckhalten */
+            furi_delay_ms(20); /* nicht verbunden / Puffer voll -> kurz zurueckhalten */
         }
     }
 }
@@ -122,14 +123,15 @@ static void io_activity(void* ctx) {
 static void ble_open(BleIsp* u) {
     u->bt = furi_record_open(RECORD_BT);
     bt_set_status_changed_callback(u->bt, ble_status_cb, u);
-    u->profile = bt_profile_start(u->bt, ble_profile_serial, NULL);   /* <<BLE>> */
+    u->profile = bt_profile_start(u->bt, ble_profile_serial, NULL); /* <<BLE>> */
     furi_hal_bt_start_advertising();
-    ble_profile_serial_set_event_callback(u->profile, RX_BUF, ble_event_cb, u);  /* <<BLE>> */
-    ble_profile_serial_set_rpc_active(u->profile, false);  /* <<BLE>> Kanal vom RPC uebernehmen -> Daten an unseren Callback */
+    ble_profile_serial_set_event_callback(u->profile, RX_BUF, ble_event_cb, u); /* <<BLE>> */
+    ble_profile_serial_set_rpc_active(
+        u->profile, false); /* <<BLE>> Kanal vom RPC uebernehmen -> Daten an unseren Callback */
 }
 static void ble_close(BleIsp* u) {
     bt_set_status_changed_callback(u->bt, NULL, NULL);
-    bt_profile_restore_default(u->bt);   /* <<BLE>> Standard-Profil (Mobile-App) zurueck */
+    bt_profile_restore_default(u->bt); /* <<BLE>> Standard-Profil (Mobile-App) zurueck */
     furi_record_close(RECORD_BT);
     u->bt = NULL;
     u->profile = NULL;

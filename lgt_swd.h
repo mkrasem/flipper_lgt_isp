@@ -26,8 +26,8 @@ void lgt_gpio_deinit(void);
 
 /* --- High-Level (machen Reset/Unlock/Erase selbst) ---
  * Rueckgabe: >=0 = Zahl abweichender Bytes (0 = ok), -1 = kein LGT erkannt. */
-int  lgt_flash(const uint8_t* img, uint32_t img_len, bool verify, LgtProgressCb cb, void* ctx);
-int  lgt_verify(const uint8_t* img, uint32_t img_len, LgtProgressCb cb, void* ctx);
+int lgt_flash(const uint8_t* img, uint32_t img_len, bool verify, LgtProgressCb cb, void* ctx);
+int lgt_verify(const uint8_t* img, uint32_t img_len, LgtProgressCb cb, void* ctx);
 
 /* Nur die Chip-ID lesen (kein Erase). true = LGT erkannt, id[0]=0x3E/0x3F. */
 bool lgt_read_id(uint8_t id[4]);
@@ -44,11 +44,11 @@ bool lgt_crack(uint8_t id[4]);
 /* Flash auslesen ueber CRACK: opfert die 1. Seite (0x000-0x3FF -> liest 0xFF),
  * 0x400.. kommt im Klartext. buf muss len Bytes fassen. 0 = ok, -1 = kein LGT.
  * Ein frisch resetteter LGT ist immer gesperrt -> Auslesen erfordert diesen Crack. */
-int  lgt_dump(uint8_t* buf, uint32_t len, LgtProgressCb cb, void* ctx);
+int lgt_dump(uint8_t* buf, uint32_t len, LgtProgressCb cb, void* ctx);
 
 /* --- Low-Level fuer STK500/USB (persistente Programmiermodus-Session) ---
  * Zwischen enter/leave koennen beliebig viele page_write/page_read erfolgen. */
-bool lgt_pmode_enter(void);   /* GPIO-Init + Reset + Unlock(+Erase). true = im Progmode. */
-void lgt_pmode_leave(void);   /* Progmode verlassen + GPIO freigeben. */
+bool lgt_pmode_enter(void); /* GPIO-Init + Reset + Unlock(+Erase). true = im Progmode. */
+void lgt_pmode_leave(void); /* Progmode verlassen + GPIO freigeben. */
 void lgt_page_write(uint32_t byteAddr, const uint8_t* buf, int size);
 void lgt_page_read(uint32_t byteAddr, uint8_t* buf, int size);
