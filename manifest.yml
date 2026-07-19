@@ -1,0 +1,47 @@
+# ============================================================
+# Flipper Apps Catalog — Manifest fuer "LGT ISP (SWD)"
+# Ablage im Catalog-Repo:  applications/GPIO/lgt_isp/manifest.yml
+# (Name/ID/Kategorie/Version kommen aus application.fam im Quell-Repo.)
+# ============================================================
+sourcecode:
+  type: git
+  location:
+    # Oeffentliches GitHub-Repo mit dem App-Quellcode (application.fam im Wurzelverzeichnis).
+    # >>> ANPASSEN: muss existieren und PUBLIC sein (TrueNAS reicht dem Catalog NICHT).
+    origin: https://github.com/mkrasem/flipper_lgt_isp.git
+    # Voller Commit-SHA des zu veroeffentlichenden Standes.
+    # >>> ANPASSEN: nach dem Push mit  git rev-parse HEAD  ermitteln.
+    commit_sha: REPLACE_WITH_FULL_40_CHAR_COMMIT_SHA
+    # Falls die App NICHT im Repo-Wurzelverzeichnis liegt, hier das Unterverzeichnis:
+    # subdir: .
+
+# Kurzbeschreibung (sonst wird fap_description aus application.fam genommen).
+short_description: Flash an LGT8F328P over its proprietary SWD from the Flipper — SD, USB or BLE (avrdude).
+
+# Lange Beschreibung (eingeschraenktes Markdown; oder @datei aus dem Quell-Repo).
+description: |
+  Programs the **LGT8F328P** (and the LGT8FX8P family — 88P / 168P / 328P) over
+  its proprietary SWD/SWC protocol, bit-banged on the Flipper's GPIO — no
+  external programmer needed.
+
+  - **Flash / verify** a `.hex` straight from the SD card.
+  - **avrdude over USB or BLE-serial** — the Flipper acts as an `stk500v1`
+    programmer (`avrdude -c stk500v1 -p m328p …`). The bit-banging stays on the
+    Flipper; the link only carries STK500 page commands.
+  - **Read chip ID** (SWDID plus the lock-independent GUID) and **dump / crack**
+    read-protected parts — the crack sacrifices only the first 1 KB
+    (`0x000–0x3FF`) and recovers everything from `0x400` onward.
+  - Bilingual **English / Deutsch** UI, switchable and remembered on the SD card.
+
+  **Wiring (3.3 V):** SWC → pin 2 (PA7), SWD → pin 3 (PA6), RESET → pin 4 (PA4),
+  VCC → pin 9, GND → pin 11. The app also draws this under *Wiring*; 5 V targets
+  need a series resistor in the (bidirectional) SWD line — see the repo README.
+
+# Changelog: Datei aus dem Quell-Repo (Format: vX.Y.Z: + Zeilen, Leerzeile trennt).
+changelog: "@changelog.md"
+
+# Unveraenderte qFlipper-Screenshots (Pfade im Quell-Repo). >>> NOCH ERSTELLEN.
+screenshots:
+  - screenshots/flp0.png
+  - screenshots/flp1.png
+  - screenshots/flp2.png
