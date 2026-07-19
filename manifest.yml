@@ -11,32 +11,31 @@ sourcecode:
     origin: https://github.com/mkrasem/flipper_lgt_isp.git
     # Voller Commit-SHA des zu veroeffentlichenden Standes.
     # >>> ANPASSEN: nach dem Push mit  git rev-parse HEAD  ermitteln.
-    commit_sha: dfdcfd0dde3ac88abcd3ff0c2252debca4a4088b
+    commit_sha: f56d34fcde2dafcb456793c953876c4f12612a12
     # Falls die App NICHT im Repo-Wurzelverzeichnis liegt, hier das Unterverzeichnis:
     # subdir: .
 
 # Kurzbeschreibung (sonst wird fap_description aus application.fam genommen).
-short_description: Flash an LGT8F328P over its proprietary SWD from the Flipper — SD, USB or BLE (avrdude).
+short_description: Flash an LGT8F328P over its proprietary SWD from the Flipper - SD, USB or BLE (avrdude).
 
-# Lange Beschreibung (eingeschraenktes Markdown; oder @datei aus dem Quell-Repo).
 description: |
-  Programs the **LGT8F328P** (and the LGT8FX8P family — 88P / 168P / 328P) over
-  its proprietary SWD/SWC protocol, bit-banged on the Flipper's GPIO — no
-  external programmer needed.
+  Programs the LGT8F328P (and the LGT8FX8P family: 88P / 168P / 328P) over its
+  proprietary SWD/SWC protocol, bit-banged on the Flipper's GPIO - no external
+  programmer needed.
 
-  - **Flash / verify** a `.hex` straight from the SD card.
-  - **avrdude over USB or BLE-serial** — the Flipper acts as an `stk500v1`
-    programmer (`avrdude -c stk500v1 -p m328p …`). The bit-banging stays on the
-    Flipper; the link only carries STK500 page commands.
-  - **Read chip ID** (SWDID plus the lock-independent GUID) and **dump / crack**
-    read-protected parts — the crack sacrifices only the first 1 KB
-    (`0x000–0x3FF`) and recovers everything from `0x400` onward.
-  - Bilingual **English / Deutsch** UI, switchable and remembered on the SD card.
+  - Flash and verify an Intel HEX file straight from the SD card.
+  - avrdude over USB or BLE-serial: the Flipper acts as an stk500v1 programmer
+    (avrdude -c stk500v1 -p m328p ...). The bit-banging stays on the Flipper;
+    the link only carries STK500 page commands.
+  - Read chip ID (SWDID plus the lock-independent GUID) and dump or crack a
+    read-protected part - the crack sacrifices only the first 1 KB (0x000-0x3FF)
+    and recovers everything from 0x400 onward.
+  - Bilingual English / German UI, switchable and remembered on the SD card.
 
-  **Wiring (3.3 V):** SWC → pin 2 (PA7), SWD → pin 3 (PA6), RESET → pin 4 (PA4),
-  VCC → pin 9, GND → pin 11. The app also draws this under *Wiring*; 5 V targets
-  need a series resistor in the (bidirectional) SWD line — see the repo README.
-
+  Wiring (3.3 V): SWC to pin 2 (PA7), SWD to pin 3 (PA6), RESET to pin 4 (PA4),
+  VCC to pin 9, GND to pin 11. The app also draws this on its Wiring screen; 5 V
+  targets need a series resistor in the bidirectional SWD line - see the README.
+  
 # Changelog: Datei aus dem Quell-Repo (Format: vX.Y.Z: + Zeilen, Leerzeile trennt).
 changelog: "@changelog.md"
 
